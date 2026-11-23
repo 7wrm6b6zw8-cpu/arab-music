@@ -9,53 +9,45 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': 
 const fmt = s => isFinite(s) && s > 0 ? Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0') : '0:00';
 const isFav = t => st.fav.some(x => x.id === t.id);
 
-// الأقسام والميكسات (أسماء المغنيين بس)
+// الميكسات الثابتة والاحترافية
 const MIX_SECTIONS = [
   {
-    title: "Made For You",
+    title: "Top Hits & Pop",
     mixes: {
-      "Sad Mix": ["Sherine", "Angham", "Tamer Ashour", "Assala", "Wael Kfoury"],
-      "Romantic Mix": ["Amr Diab", "Tamer Hosny", "Ramy Sabry", "Bahaa Sultan"],
-      "Workout Mix": ["Wegz", "Marwan Pablo", "Afroto", "Mohamed Ramadan"],
-      "Chill Mix": ["Fairuz", "Abdel Halim Hafez", "Abyusif", "Amr Diab"],
-      "Party Mix": ["Mohamed Ramadan", "Hassan Shakosh", "Wegz", "Tamer Hosny"]
+      "Arabic Top Hits": ["Amr Diab", "Tamer Hosny", "Sherine", "Ramy Sabry", "Angham", "Bahaa Sultan"],
+      "Romantic Mix": ["Tamer Ashour", "Wael Kfoury", "Majid Al Futtaim", "Amr Diab", "Assala"],
+      "Party & Dance": ["Mohamed Ramadan", "Wegz", "Hassan Shakosh", "Tamer Hosny"]
     }
   },
   {
-    title: "Popular Genres",
+    title: "Street & Youth",
     mixes: {
-      "Mahraganat": ["Hamo El Mardashy", "Mohamed Ramadan", "Hassan Shakosh", "Essam Sasa"],
+      "Mahraganat": ["Hamo El Mardashy", "Essam Sasa", "Omar Kamal", "Hassan Shakosh"],
       "Arabic Rap": ["Wegz", "Marwan Pablo", "Afroto", "Abyusif", "Mousv"],
-      "Pop Arabic": ["Amr Diab", "Tamer Hosny", "Sherine", "Ramy Sabry", "Angham"],
-      "Tarab Classics": ["Umm Kulthum", "Abdel Halim Hafez", "Fairuz", "Warda"]
+      "Modern Egypt": ["Mohamed Ramadan", "Wegz", "Marwan Pablo", "Sherine"]
     }
   },
   {
-    title: "Top Artists Mixes",
+    title: "Classics & Tarab",
+    mixes: {
+      "Golden Era": ["Umm Kulthum", "Abdel Halim Hafez", "Fairuz", "Warda"]
+    }
+  },
+  {
+    title: "Top Artists",
     mixes: {
       "Amr Diab Mix": ["Amr Diab"],
       "Tamer Hosny Mix": ["Tamer Hosny"],
       "Sherine Mix": ["Sherine"],
       "Wegz Mix": ["Wegz"],
-      "Mohamed Ramadan Mix": ["Mohamed Ramadan"],
-      "Ramy Sabry Mix": ["Ramy Sabry"],
-      "Angham Mix": ["Angham"],
-      "Hamo El Mardashy Mix": ["Hamo El Mardashy"]
-    }
-  },
-  {
-    title: "Trending & New",
-    mixes: {
-      "Trending Egypt": ["Trending Egypt"]
+      "Mohamed Ramadan Mix": ["Mohamed Ramadan"]
     }
   }
 ];
 
 const ALL_MIXES = {};
 MIX_SECTIONS.forEach(sec => {
-  for (const [name, queries] of Object.entries(sec.mixes)) {
-    ALL_MIXES[name] = queries;
-  }
+  for (const [name, queries] of Object.entries(sec.mixes)) ALL_MIXES[name] = queries;
 });
 
 const P = {
@@ -83,15 +75,14 @@ P.rep1 = P.rep + '<path d="M11 10.5l1.2-1v6" stroke-width="1.6"/>';
 const FILLED = new Set(['play', 'pause', 'next', 'prev', 'heartF']);
 const ic = n => `<svg viewBox="0 0 24 24" class="ic${FILLED.has(n) ? ' f' : ''}" aria-hidden="true">${P[n]}</svg>`;
 const greet = () => { const h = new Date().getHours(); return h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'; };
-
 const shuffleArray = arr => arr.sort(() => Math.random() - 0.5);
 
 const row = (t, c, i) => {
   const a = `data-c="${esc(c)}" data-i="${i}"`, f = isFav(t);
   const artistSpan = `<span style="text-decoration:underline;cursor:pointer" data-artist="${esc(t.artist)}" data-artistid="${esc(t.artistId || '')}">${esc(t.artist)}</span>`;
-  return `<div class="row"><img src="${esc(t.cover)}" alt="" loading="lazy"><div class="m" data-act="play" ${a}><b>${esc(t.title)}</b><small>${artistSpan}${t.album ? ' · ' + esc(t.album) : ''}</small></div><button data-act="fav" ${a} class="${f ? 'on' : ''}" aria-label="Favorite">${ic(f ? 'heartF' : 'heart')}</button>${c.startsWith('pl:') ? `<button data-act="rm" ${a} aria-label="Remove from playlist">${ic('x')}</button>` : `<button data-act="add" ${a} aria-label="Add to playlist">${ic('plus')}</button>`}</div>`;
+  return `<div class="row"><img src="${esc(t.cover)}" alt="" loading="lazy"><div class="m" data-act="play" ${a}><b>${esc(t.title)}</b><small>${artistSpan}${t.album ? ' · ' + esc(t.album) : ''}</small></div><button data-act="fav" ${a} class="${f ? 'on' : ''}">${ic(f ? 'heartF' : 'heart')}</button>${c.startsWith('pl:') ? `<button data-act="rm" ${a}>${ic('x')}</button>` : `<button data-act="add" ${a}>${ic('plus')}</button>`}</div>`;
 };
-const list = (a, c) => { lists[c] = a; return a.length ? a.map((t, i) => row(t, c, i)).join('') : '<p class="e">Nothing here yet. Tap the heart next to any song to save it.</p>'; };
+const list = (a, c) => { lists[c] = a; return a.length ? a.map((t, i) => row(t, c, i)).join('') : '<p class="e">Nothing here yet.</p>'; };
 const chip = n => `<button class="chip" data-act="q" data-q="${esc(n)}">${esc(n)}</button>`;
 
 let tok = 0;
@@ -102,8 +93,8 @@ async function run(q) {
   try {
     let a = await src.search(q); if (n !== tok) return;
     const seen = new Set(); a = a.filter(t => { const k = (t.title + t.artist).toLowerCase(); return seen.has(k) ? false : seen.add(k); });
-    r.innerHTML = a.length ? list(a, 's') : `<p class="e">No results for “${esc(q)}”. Try different words.</p>`;
-  } catch { if (n === tok) r.innerHTML = '<p class="er">Couldn’t reach the music source. Check your connection and try again.</p>'; }
+    r.innerHTML = a.length ? list(a, 's') : `<p class="e">No results for “${esc(q)}”.</p>`;
+  } catch { if (n === tok) r.innerHTML = '<p class="er">Couldn’t reach the music source.</p>'; }
 }
 const ch = () => { const c = $('#ch'); if (c) c.innerHTML = st.hist.filter(h => h.includes($('#q').value)).slice(0, 8).map(chip).join(''); };
 
@@ -112,9 +103,26 @@ const V = {
     const rc = st.recent.slice(0, 6); lists.rc = rc;
     
     let mixesHtml = '';
+    
+    // 1. قسم التوصيات الذكي (Daily Mix)
+    // بنجمع أكتر مغنيين المستخدم بيسمعهم
+    const artistCounts = {};
+    [...st.fav, ...st.recent].forEach(t => { if(t.artist) artistCounts[t.artist] = (artistCounts[t.artist] || 0) + 1; });
+    const topArtists = Object.keys(artistCounts).sort((a,b) => artistCounts[b] - artistCounts[a]).slice(0, 2);
+    
+    if (topArtists.length > 0) {
+       mixesHtml += `<h2>Made For You</h2><div class="h-scroll">
+          <div class="card" data-act="rec">
+            <div style="width:100%;aspect-ratio:1;border-radius:6px;background:linear-gradient(135deg, #1ED760, #000);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:18px;text-align:center;padding:10px;box-shadow:0 8px 24px rgba(0,0,0,0.5)">Daily<br>Mix 1</div>
+            <b>Daily Mix 1</b>
+            <small>${esc(topArtists[0])} & Similar</small>
+          </div>
+       </div>`;
+    }
+
+    // 2. باقي الميكسات
     MIX_SECTIONS.forEach(sec => {
       const mixNames = shuffleArray(Object.keys(sec.mixes));
-      
       const cards = mixNames.map(mixName => `
         <div class="card" data-act="mix" data-mix="${esc(mixName)}">
           <div style="width:100%;aspect-ratio:1;border-radius:6px;background:linear-gradient(135deg, ${['#1ED760','#FF5722','#3F51B5','#9C27B0','#F44336'][Math.floor(Math.random()*5)]}, #121212);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px;text-align:center;padding:10px;box-shadow:0 8px 24px rgba(0,0,0,0.5)">${esc(mixName)}</div>
@@ -122,7 +130,6 @@ const V = {
           <small>Playlist</small>
         </div>
       `).join('');
-      
       mixesHtml += `<h2>${esc(sec.title)}</h2><div class="h-scroll">${cards}</div>`;
     });
 
@@ -135,7 +142,7 @@ const V = {
       if (st.view !== 'home') return; 
       $('#tr').innerHTML = list(a.slice(0, 20), 'tr'); 
     }).catch(() => { 
-      if (st.view === 'home') $('#tr').innerHTML = '<p class="er">Couldn’t load songs. Check your connection.</p>'; 
+      if (st.view === 'home') $('#tr').innerHTML = '<p class="er">Couldn’t load songs.</p>'; 
     });
   },
   search() { el.innerHTML = `<h2 class="g">Search</h2><input id="q" type="search" dir="auto" placeholder="What do you want to listen to?" value="${esc(st.q)}" enterkeyhint="search" autocomplete="off"><div class="chips" id="ch"></div><div id="res"></div>`; ch(); run(st.q); },
@@ -144,7 +151,7 @@ const V = {
   playlists() {
     const n = st.open;
     if (n && st.pl[n]) el.innerHTML = `<div class="chips"><button class="chip" data-act="back">${ic('back')}Back</button><button class="chip" data-act="pldel" data-n="${esc(n)}">Delete playlist</button></div><h2 class="g">${esc(n)}</h2>` + list(st.pl[n], 'pl:' + n);
-    else el.innerHTML = '<h2 class="g">Playlists</h2><button class="chip" data-act="plnew">' + ic('plus') + 'New playlist</button>' + (Object.keys(st.pl).map(k => `<div class="row" data-act="plopen" data-n="${esc(k)}"><div class="ph">${ic('list')}</div><div class="m"><b>${esc(k)}</b><small>${st.pl[k].length} songs</small></div></div>`).join('') || '<p class="e">Create your first playlist, or tap + next to any song.</p>');
+    else el.innerHTML = '<h2 class="g">Playlists</h2><button class="chip" data-act="plnew">' + ic('plus') + 'New playlist</button>' + (Object.keys(st.pl).map(k => `<div class="row" data-act="plopen" data-n="${esc(k)}"><div class="ph">${ic('list')}</div><div class="m"><b>${esc(k)}</b><small>${st.pl[k].length} songs</small></div></div>`).join('') || '<p class="e">Create your first playlist.</p>');
   },
   artist(name, id) {
     el.innerHTML = `<div class="chips"><button class="chip" data-act="backhome">${ic('back')}Back</button></div><h2 class="g">${esc(name)}</h2><div id="artist-res"><p class="ld">Loading…</p></div>`;
@@ -166,12 +173,9 @@ function msMeta(t) {
 function bindMS() {
   if (!ms) return;
   const h = (a, f) => { try { ms.setActionHandler(a, f); } catch {} };
-  h('seekbackward', null);
-  h('seekforward', null);
-  h('play', () => au.play().catch(() => {}));
-  h('pause', () => au.pause());
-  h('nexttrack', () => next(false));
-  h('previoustrack', () => prev());
+  h('seekbackward', null); h('seekforward', null);
+  h('play', () => au.play().catch(() => {})); h('pause', () => au.pause());
+  h('nexttrack', () => next(false)); h('previoustrack', () => prev());
   h('seekto', d => { if (d.seekTime != null) au.currentTime = d.seekTime; });
 }
 bindMS();
@@ -181,51 +185,29 @@ function play(l, i) { st.queue = l.slice(); st.idx = i; load(); }
 async function load() {
   const t = st.queue[st.idx]; if (!t) return; st.err = '';
   msMeta(t);
-  try { au.src = src.streamUrl(t); drawP(); await au.play(); } catch (e) { if (e.name !== 'AbortError') st.err = 'Couldn’t play this song. Try another one.'; }
+  try { au.src = src.streamUrl(t); drawP(); await au.play(); } catch (e) { if (e.name !== 'AbortError') st.err = 'Couldn’t play this song.'; }
   st.recent = [t, ...st.recent.filter(x => x.id !== t.id)].slice(0, 30); S('recent', st.recent); drawP();
 }
 
 async function autoFetchMore() {
-  if (st.fetching) return;
-  st.fetching = true;
+  if (st.fetching) return; st.fetching = true;
   const current = st.queue[st.idx];
   if (!current) { st.fetching = false; return; }
-  
-  st.err = 'Loading more songs…';
-  drawP();
-  
+  st.err = 'Loading more songs…'; drawP();
   try {
     let more = [];
-    if (current.artistId) {
-      more = await src.getArtist(current.artistId);
-    } else {
-      const res = await src.search(current.artist);
-      more = res.filter(t => t.artist.toLowerCase().includes(current.artist.toLowerCase()));
-    }
-    
-    if (more.length < 3) {
-      const trend = await src.trending();
-      more = more.concat(trend);
-    }
-    
+    if (current.artistId) { more = await src.getArtist(current.artistId); } 
+    else { const res = await src.search(current.artist); more = res.filter(t => t.artist.toLowerCase().includes(current.artist.toLowerCase())); }
+    if (more.length < 3) { const trend = await src.trending(); more = more.concat(trend); }
     const queueIds = new Set(st.queue.map(t => t.id));
     more = more.filter(t => !queueIds.has(t.id));
-    
     if (more.length > 0) {
       more.sort(() => Math.random() - 0.5);
       const add = more.slice(0, 15);
-      st.queue = st.queue.concat(add);
-      st.idx = st.queue.length - add.length;
-      st.err = '';
-      load();
-    } else {
-      st.err = 'No more songs.';
-      drawP();
-    }
-  } catch (e) {
-    st.err = 'Couldn’t fetch more songs.';
-    drawP();
-  }
+      st.queue = st.queue.concat(add); st.idx = st.queue.length - add.length;
+      st.err = ''; load();
+    } else { st.err = 'No more songs.'; drawP(); }
+  } catch (e) { st.err = 'Couldn’t fetch more songs.'; drawP(); }
   st.fetching = false;
 }
 
@@ -233,14 +215,7 @@ function next(auto) {
   const n = st.queue.length; if (!n) return;
   if (auto && st.rep === 2) { au.currentTime = 0; au.play(); return; }
   let i = st.shuf ? Math.floor(Math.random() * n) : st.idx + 1;
-  if (i >= n) { 
-    if (st.rep || !auto) {
-      i = 0; 
-    } else {
-      autoFetchMore(); 
-      return; 
-    }
-  }
+  if (i >= n) { if (st.rep || !auto) { i = 0; } else { autoFetchMore(); return; } }
   st.idx = i; load();
 }
 function prev() { if (!st.queue.length) return; if (au.currentTime > 3) { au.currentTime = 0; return; } st.idx = (st.idx - 1 + st.queue.length) % st.queue.length; load(); }
@@ -256,18 +231,16 @@ function drawP() {
   const t = st.queue[st.idx], m = $('#mini'); m.hidden = !t; if (!t) return;
   if (ms) ms.playbackState = au.paused ? 'paused' : 'playing';
   const pl = ic(au.paused ? 'play' : 'pause'), w = au.duration ? au.currentTime / au.duration * 100 : 0;
-  m.innerHTML = `<img src="${esc(t.cover)}" alt=""><div class="mt" data-act="expand"><b>${esc(t.title)}</b><small>${st.err ? esc(st.err) : esc(t.artist)}</small></div><button data-act="pp" aria-label="Play or pause">${pl}</button><button data-act="next" aria-label="Next">${ic('next')}</button><div class="mp"><i id="mpb" style="width:${w}%"></i></div>`;
-  if (!$('#full').hidden) $('#full').innerHTML = `<button data-act="close" class="cl" aria-label="Close">${ic('down')}</button><img class="big" src="${esc(t.cover)}" alt=""><h2>${esc(t.title)}</h2><small>${esc(t.artist)}</small>${st.err ? `<p class="er">${esc(st.err)}</p>` : ''}<input id="seek" type="range" min="0" max="${au.duration || 0}" step="1" value="${au.currentTime}" dir="ltr"><div class="tm" dir="ltr"><span id="ct">${fmt(au.currentTime)}</span><span id="dt">${fmt(au.duration)}</span></div><div class="ctl" dir="ltr"><button data-act="shuf" class="${st.shuf ? 'on' : ''}" aria-label="Shuffle">${ic('shuf')}</button><button data-act="prev" aria-label="Previous">${ic('prev')}</button><button class="pp" data-act="pp" aria-label="Play or pause">${pl}</button><button data-act="next" aria-label="Next">${ic('next')}</button><button data-act="rep" class="${st.rep ? 'on' : ''}" aria-label="Repeat">${ic(st.rep === 2 ? 'rep1' : 'rep')}</button></div><div class="vol" dir="ltr"><button data-act="mute" aria-label="Mute">${ic(au.muted ? 'mute' : 'vol')}</button><input id="vol" type="range" min="0" max="1" step=".05" value="${au.volume}"></div><h2>Queue</h2>` + st.queue.map((x, i) => `<div class="q ${i === st.idx ? 'cur' : ''}" data-act="qplay" data-i="${i}">${esc(x.title)} — ${esc(x.artist)}</div>`).join('');
+  m.innerHTML = `<img src="${esc(t.cover)}" alt=""><div class="mt" data-act="expand"><b>${esc(t.title)}</b><small>${st.err ? esc(st.err) : esc(t.artist)}</small></div><button data-act="pp">${pl}</button><button data-act="next">${ic('next')}</button><div class="mp"><i id="mpb" style="width:${w}%"></i></div>`;
+  if (!$('#full').hidden) $('#full').innerHTML = `<button data-act="close" class="cl">${ic('down')}</button><img class="big" src="${esc(t.cover)}" alt=""><h2>${esc(t.title)}</h2><small>${esc(t.artist)}</small>${st.err ? `<p class="er">${esc(st.err)}</p>` : ''}<input id="seek" type="range" min="0" max="${au.duration || 0}" step="1" value="${au.currentTime}" dir="ltr"><div class="tm" dir="ltr"><span id="ct">${fmt(au.currentTime)}</span><span id="dt">${fmt(au.duration)}</span></div><div class="ctl" dir="ltr"><button data-act="shuf" class="${st.shuf ? 'on' : ''}">${ic('shuf')}</button><button data-act="prev">${ic('prev')}</button><button class="pp" data-act="pp">${pl}</button><button data-act="next">${ic('next')}</button><button data-act="rep" class="${st.rep ? 'on' : ''}">${ic(st.rep === 2 ? 'rep1' : 'rep')}</button></div><div class="vol" dir="ltr"><button data-act="mute">${ic(au.muted ? 'mute' : 'vol')}</button><input id="vol" type="range" min="0" max="1" step=".05" value="${au.volume}"></div><h2>Queue</h2>` + st.queue.map((x, i) => `<div class="q ${i === st.idx ? 'cur' : ''}" data-act="qplay" data-i="${i}">${esc(x.title)} — ${esc(x.artist)}</div>`).join('');
 }
 
 document.addEventListener('click', e => {
   const artistEl = e.target.closest('[data-artist]');
   if (artistEl) {
-    e.stopPropagation();
-    st.view = 'artist';
+    e.stopPropagation(); st.view = 'artist';
     document.querySelectorAll('#nav button').forEach(b => b.classList.remove('on'));
-    V.artist(artistEl.dataset.artist, artistEl.dataset.artistid);
-    return;
+    V.artist(artistEl.dataset.artist, artistEl.dataset.artistid); return;
   }
 
   const b = e.target.closest('[data-act],[data-go]'); if (!b) return;
@@ -276,24 +249,29 @@ document.addEventListener('click', e => {
   
   if (a === 'backhome') { return go('home'); }
 
+  // زرار تشغيل التوصيات
+  if (a === 'rec') {
+    const artistCounts = {};
+    [...st.fav, ...st.recent].forEach(t => { if(t.artist) artistCounts[t.artist] = (artistCounts[t.artist] || 0) + 1; });
+    const topArtists = Object.keys(artistCounts).sort((a,b) => artistCounts[b] - artistCounts[a]).slice(0, 2);
+    
+    el.innerHTML = `<div class="chips"><button class="chip" data-act="backhome">${ic('back')}Back</button></div><h2 class="g">Daily Mix 1</h2><p class="ld">Curating based on your taste...</p>`;
+    
+    src.search("RECOMMEND:" + topArtists.join(',')).then(tracks => {
+      if (tracks.length > 0) { play(tracks, 0); go('home'); } 
+      else { el.innerHTML = `<p class="er">Could not find songs for you right now.</p><button class="chip" data-act="backhome">Back</button>`; }
+    });
+    return;
+  }
+
   if (a === 'mix') {
     const mixName = d.mix;
     const queries = ALL_MIXES[mixName] || [];
-    
-    // بنبعت للـ Worker أسماء المغنيين عشان يجيب Top Tracks من Deezer
     let workerQuery = "MIX:" + queries.join(',');
-    
     el.innerHTML = `<div class="chips"><button class="chip" data-act="backhome">${ic('back')}Back</button></div><h2 class="g">${esc(mixName)}</h2><p class="ld">Building your mix...</p>`;
-    
     src.search(workerQuery).then(tracks => {
-      if (tracks.length > 0) {
-        play(tracks, 0);
-        go('home');
-      } else {
-        el.innerHTML = `<p class="er">Could not find songs for this mix right now.</p><button class="chip" data-act="backhome">Back</button>`;
-      }
-    }).catch(() => {
-        el.innerHTML = `<p class="er">Error building mix.</p><button class="chip" data-act="backhome">Back</button>`;
+      if (tracks.length > 0) { play(tracks, 0); go('home'); } 
+      else { el.innerHTML = `<p class="er">Could not find songs right now.</p><button class="chip" data-act="backhome">Back</button>`; }
     });
     return;
   }
@@ -301,7 +279,7 @@ document.addEventListener('click', e => {
   const A = {
     play: () => play(lists[d.c], +d.i),
     fav: () => { st.fav = isFav(t) ? st.fav.filter(x => x.id !== t.id) : [t, ...st.fav]; S('fav', st.fav); b.innerHTML = ic(isFav(t) ? 'heartF' : 'heart'); b.classList.toggle('on', isFav(t)); },
-    add: () => { const k = (prompt('Playlist name' + (Object.keys(st.pl).length ? '\nPlaylists: ' + Object.keys(st.pl).join(', ') : '')) || '').trim(); if (!k) return; st.pl[k] = st.pl[k] || []; if (!st.pl[k].some(x => x.id === t.id)) st.pl[k].push(t); S('pl', st.pl); b.innerHTML = ic('check'); b.classList.add('on'); },
+    add: () => { const k = (prompt('Playlist name') || '').trim(); if (!k) return; st.pl[k] = st.pl[k] || []; if (!st.pl[k].some(x => x.id === t.id)) st.pl[k].push(t); S('pl', st.pl); b.innerHTML = ic('check'); b.classList.add('on'); },
     rm: () => { st.pl[d.c.slice(3)].splice(+d.i, 1); S('pl', st.pl); V.playlists(); },
     q: () => { st.q = d.q; go('search'); },
     plnew: () => { const k = (prompt('New playlist name') || '').trim(); if (k) { st.pl[k] = st.pl[k] || []; S('pl', st.pl); V.playlists(); } },
