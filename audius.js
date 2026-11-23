@@ -1,8 +1,25 @@
-// Temporary test source: Audius public API (free-to-stream music).
-const B = 'https://api.audius.co/v1', A = 'app_name=ArabMusic';
-const map = t => ({ id: 'au' + t.id, source: 'audius', audiusId: t.id, title: t.title, artist: t.user?.name || '', album: '', cover: t.artwork?.['480x480'] || t.artwork?.['150x150'] || '', duration: t.duration });
-const get = async u => { const r = await fetch(u); if (!r.ok) throw new Error('Audius ' + r.status); return (await r.json()).data.map(map); };
+// Audius catalog source. Playback is limited to tracks served by Audius.
+const BASE = 'https://api.audius.co/v1';
+const APP = 'app_name=BODO';
+const mapTrack = track => ({
+  id: `au${track.id}`,
+  source: 'audius',
+  audiusId: track.id,
+  title: String(track.title || ''),
+  artist: String(track.user?.name || ''),
+  album: '',
+  cover: track.artwork?.['480x480'] || track.artwork?.['150x150'] || '',
+  duration: Number(track.duration) || 0
+});
+
+async function get(url) {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`Audius request failed (${response.status})`);
+  const payload = await response.json();
+  return (Array.isArray(payload?.data) ? payload.data : []).map(mapTrack).filter(t => t.title);
+}
+
 export const isEnabled = () => true;
-export const search = q => get(`${B}/tracks/search?query=${encodeURIComponent(q)}&${A}`);
-export const trending = () => get(`${B}/tracks/trending?${A}`);
-export const streamUrl = t => `${B}/tracks/${t.audiusId}/stream?${A}`;
+export const search = query => get(`${BASE}/tracks/search?query=${encodeURIComponent(String(query || ''))}&${APP}`);
+export const trending = () => get(`${BASE}/tracks/trending?${APP}`);
+export const streamUrl = track => `${BASE}/tracks/${encodeURIComponent(track.audiusId)}/stream?${APP}`;

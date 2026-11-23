@@ -1,14 +1,14 @@
-export const parseTracks = (raw) => {
-  if (!raw || !raw.items) return [];
-  return raw.items.map((x) => ({
-    id: 'alb' + x.id,
+export const parseTracks = raw => {
+  const items = Array.isArray(raw?.items) ? raw.items : [];
+  return items.map(item => ({
+    id: item?.id != null ? `alb${item.id}` : '',
     source: 'albumaty',
-    title: String(x.title || ''),
-    artist: String(x.artist || ''),
-    album: String(x.album || ''),
-    cover: x.cover || '',
-    duration: Number(x.duration) || 0,
-    audioUrl: x.mp3,
-    artistId: x.singerId ? 'alb_' + x.singerId : null
-  })).filter(t => t.title && t.audioUrl);
+    title: String(item?.title || '').trim(),
+    artist: String(item?.artist || '').trim(),
+    album: String(item?.album || '').trim(),
+    cover: String(item?.cover || ''),
+    duration: Number(item?.duration) || 0,
+    audioUrl: typeof item?.mp3 === 'string' ? item.mp3 : '',
+    artistId: item?.singerId ? `alb_${item.singerId}` : null
+  })).filter(track => track.id && track.title && track.audioUrl);
 };
