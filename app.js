@@ -82,16 +82,19 @@ function msMeta(t) {
   if (!ms) return;
   try { ms.metadata = new MediaMetadata({ title: t.title, artist: t.artist, album: t.album || 'BODO', artwork: t.cover ? [{ src: new URL(t.cover, location.href).href, sizes: '512x512' }] : [] }); } catch {}
 }
-if (ms) {
+function bindMS() {
+  if (!ms) return;
   const h = (a, f) => { try { ms.setActionHandler(a, f); } catch {} };
+  h('seekbackward', null);
+  h('seekforward', null);
   h('play', () => au.play().catch(() => {}));
   h('pause', () => au.pause());
   h('nexttrack', () => next(false));
   h('previoustrack', () => prev());
-  h('seekbackward', null);
-  h('seekforward', null);
   h('seekto', d => { if (d.seekTime != null) au.currentTime = d.seekTime; });
 }
+bindMS();
+au.addEventListener('playing', () => { const t = st.queue[st.idx]; if (t) msMeta(t); bindMS(); });
 
 function play(l, i) { st.queue = l.slice(); st.idx = i; load(); }
 async function load() {
