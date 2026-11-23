@@ -9,6 +9,59 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': 
 const fmt = s => isFinite(s) && s > 0 ? Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0') : '0:00';
 const isFav = t => st.fav.some(x => x.id === t.id);
 
+// الأقسام والميكسات الكتير
+const MIX_SECTIONS = [
+  {
+    title: "Made For You",
+    mixes: {
+      "Sad Mix": ["Sherine", "Angham", "Tamer Ashour", "Assala", "Wael Kfoury"],
+      "Romantic Mix": ["Amr Diab", "Tamer Hosny", "Ramy Sabry", "Bahaa Sultan"],
+      "Workout Mix": ["Wegz", "Marwan Pablo", "Afroto", "Mohamed Ramadan"],
+      "Chill Mix": ["Fairuz", "Abdel Halim Hafez", "Abyusif", "Amr Diab"],
+      "Party Mix": ["Mohamed Ramadan", "Hassan Shakosh", "Wegz", "Tamer Hosny"]
+    }
+  },
+  {
+    title: "Popular Genres",
+    mixes: {
+      "Mahraganat": ["Hamo El Mardashy", "Mohamed Ramadan", "Hassan Shakosh", "Essam Sasa", "Omar Kamal"],
+      "Arabic Rap": ["Wegz", "Marwan Pablo", "Afroto", "Abyusif", "Mousv"],
+      "Pop Arabic": ["Amr Diab", "Tamer Hosny", "Sherine", "Ramy Sabry", "Angham"],
+      "Tarab Classics": ["Umm Kulthum", "Abdel Halim Hafez", "Fairuz", "Warda", "Mohammed Abdel Wahab"]
+    }
+  },
+  {
+    title: "Top Artists Mixes",
+    mixes: {
+      "Amr Diab": ["Amr Diab"],
+      "Tamer Hosny": ["Tamer Hosny"],
+      "Sherine": ["Sherine"],
+      "Wegz": ["Wegz"],
+      "Mohamed Ramadan": ["Mohamed Ramadan"],
+      "Ramy Sabry": ["Ramy Sabry"],
+      "Angham": ["Angham"],
+      "Hamo El Mardashy": ["Hamo El Mardashy"]
+    }
+  },
+  {
+    title: "Eras & Decades",
+    mixes: {
+      "90s Hits": ["عمرو دياب 90", "اغاني تسعينات"],
+      "2000s Hits": ["تامر حسني 2000", "اغاني 2000"],
+      "Golden Oldies": ["عبد الحليم حافظ", "ام كلثوم", "فيروز"],
+      "New 2024": ["اغاني جديدة 2024", "تريند 2024"]
+    }
+  }
+];
+
+// بنجمع كل الميكسات في مكان واحد
+const ALL_MIXES = {};
+MIX_SECTIONS.forEach(sec => {
+  for (const [name, queries] of Object.entries(sec.mixes)) {
+    ALL_MIXES[name] = queries;
+  }
+});
+
 const P = {
   home: '<path d="M3.5 10.5 12 3.5l8.5 7V20a1 1 0 0 1-1 1H15v-6H9v6H4.5a1 1 0 0 1-1-1z"/>',
   search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
@@ -35,6 +88,9 @@ const FILLED = new Set(['play', 'pause', 'next', 'prev', 'heartF']);
 const ic = n => `<svg viewBox="0 0 24 24" class="ic${FILLED.has(n) ? ' f' : ''}" aria-hidden="true">${P[n]}</svg>`;
 const greet = () => { const h = new Date().getHours(); return h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'; };
 
+// دالة لخلط الكروت عشان تظهر بشكل مختلف كل مرة (بتتجدد)
+const shuffleArray = arr => arr.sort(() => Math.random() - 0.5);
+
 const row = (t, c, i) => {
   const a = `data-c="${esc(c)}" data-i="${i}"`, f = isFav(t);
   const artistSpan = `<span style="text-decoration:underline;cursor:pointer" data-artist="${esc(t.artist)}" data-artistid="${esc(t.artistId || '')}">${esc(t.artist)}</span>`;
@@ -59,35 +115,31 @@ const ch = () => { const c = $('#ch'); if (c) c.innerHTML = st.hist.filter(h => 
 const V = {
   home() {
     const rc = st.recent.slice(0, 6); lists.rc = rc;
+    
+    // بناء كروت الميكسات
+    let mixesHtml = '';
+    MIX_SECTIONS.forEach(sec => {
+      // بنخلط الكروت جوة القسم عشان تبان متجددة
+      const mixNames = shuffleArray(Object.keys(sec.mixes));
+      
+      const cards = mixNames.map(mixName => `
+        <div class="card" data-act="mix" data-mix="${esc(mixName)}">
+          <div style="width:100%;aspect-ratio:1;border-radius:6px;background:linear-gradient(135deg, ${['#1ED760','#FF5722','#3F51B5','#9C27B0','#F44336'][Math.floor(Math.random()*5)]}, #121212);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px;text-align:center;padding:10px;box-shadow:0 8px 24px rgba(0,0,0,0.5)">${esc(mixName)}</div>
+          <b>${esc(mixName)}</b>
+          <small>Playlist</small>
+        </div>
+      `).join('');
+      
+      mixesHtml += `<h2>${esc(sec.title)}</h2><div class="h-scroll">${cards}</div>`;
+    });
+
     el.innerHTML = `<h2 class="g">${greet()}</h2>` +
       (rc.length ? '<div class="grid">' + rc.map((t, i) => `<div class="gc" data-act="play" data-c="rc" data-i="${i}"><img src="${esc(t.cover)}" alt="" loading="lazy"><b>${esc(t.title)}</b></div>`).join('') + '</div>' : '') +
-      (st.fav.length ? '<h2>Your favorites</h2>' + list(st.fav.slice(0, 3), 'hf') : '') +
-      '<h2>Popular Radios</h2><div class="h-scroll" id="radios"><p class="ld">Loading…</p></div>' +
+      mixesHtml +
       '<h2>Trending now</h2><div id="tr"><p class="ld">Loading…</p></div>';
-
+      
     src.trending().then(a => { 
       if (st.view !== 'home') return; 
-      
-      // تجميع الأغاني في شكل راديو (Mix) زي إسبوتيفاي
-      const byArtist = {};
-      a.forEach(t => {
-        const art = t.artist || 'Unknown';
-        if (!byArtist[art]) byArtist[art] = [];
-        byArtist[art].push(t);
-      });
-
-      const radios = Object.keys(byArtist).slice(0, 10).map(art => {
-        const tracks = byArtist[art];
-        // بناخد أول 20 أغنية كـ Mix
-        lists['radio_' + art] = tracks; 
-        return `<div class="card" data-act="play" data-c="radio_${esc(art)}" data-i="0">
-          <img src="${esc(tracks[0].cover)}" alt="">
-          <b>${esc(art)} Radio</b>
-          <small>${esc(art)}, ${tracks.length > 1 ? esc(tracks[1].artist) : 'Top tracks'}...</small>
-        </div>`;
-      });
-
-      $('#radios').innerHTML = radios.join('') || '<p class="e">No radios available.</p>';
       $('#tr').innerHTML = list(a.slice(0, 20), 'tr'); 
     }).catch(() => { 
       if (st.view === 'home') $('#tr').innerHTML = '<p class="er">Couldn’t load songs. Check your connection.</p>'; 
@@ -230,6 +282,28 @@ document.addEventListener('click', e => {
   const t = lists[d.c]?.[d.i];
   
   if (a === 'backhome') { return go('home'); }
+
+  if (a === 'mix') {
+    const mixName = d.mix;
+    el.innerHTML = `<div class="chips"><button class="chip" data-act="backhome">${ic('back')}Back</button></div><h2 class="g">${esc(mixName)}</h2><p class="ld">Building your mix...</p>`;
+    const queries = ALL_MIXES[mixName] || [];
+    
+    // بنجيب النتايج من كل المغنيين اللي في الميكس ونخلطهم
+    Promise.all(queries.map(q => src.search(q).catch(() => []))).then(results => {
+      let allTracks = results.flat();
+      const seen = new Set();
+      allTracks = allTracks.filter(x => { const k = x.title + x.artist; return seen.has(k) ? false : seen.add(k); });
+      
+      if (allTracks.length > 0) {
+        allTracks.sort(() => Math.random() - 0.5); // شفل عشوائي عشان الميكس يتجدد
+        play(allTracks, 0);
+        go('home');
+      } else {
+        el.innerHTML = `<p class="er">Could not find songs for this mix right now.</p><button class="chip" data-act="backhome">Back</button>`;
+      }
+    });
+    return;
+  }
 
   const A = {
     play: () => play(lists[d.c], +d.i),
