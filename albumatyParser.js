@@ -1,6 +1,5 @@
 export const parseTracks = (raw) => {
   if (!raw || !raw.items) return [];
-  
   return raw.items.map((x) => ({
     id: 'alb' + x.id,
     source: 'albumaty',
@@ -9,6 +8,7 @@ export const parseTracks = (raw) => {
     album: String(x.album || ''),
     cover: x.cover || '',
     duration: Number(x.duration) || 0,
-    audioUrl: x.mp3
+    audioUrl: x.mp3,
+    artistId: x.singerId ? 'alb_' + x.singerId : null
   })).filter(t => t.title && t.audioUrl);
 };
