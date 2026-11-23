@@ -9,7 +9,6 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': 
 const fmt = s => isFinite(s) && s > 0 ? Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0') : '0:00';
 const isFav = t => st.fav.some(x => x.id === t.id);
 
-// الأقسام والميكسات الكتير
 const MIX_SECTIONS = [
   {
     title: "Made For You",
@@ -33,28 +32,25 @@ const MIX_SECTIONS = [
   {
     title: "Top Artists Mixes",
     mixes: {
-      "Amr Diab": ["Amr Diab"],
-      "Tamer Hosny": ["Tamer Hosny"],
-      "Sherine": ["Sherine"],
-      "Wegz": ["Wegz"],
-      "Mohamed Ramadan": ["Mohamed Ramadan"],
-      "Ramy Sabry": ["Ramy Sabry"],
-      "Angham": ["Angham"],
-      "Hamo El Mardashy": ["Hamo El Mardashy"]
+      "Amr Diab Mix": ["Amr Diab"],
+      "Tamer Hosny Mix": ["Tamer Hosny"],
+      "Sherine Mix": ["Sherine"],
+      "Wegz Mix": ["Wegz"],
+      "Mohamed Ramadan Mix": ["Mohamed Ramadan"],
+      "Ramy Sabry Mix": ["Ramy Sabry"],
+      "Angham Mix": ["Angham"],
+      "Hamo El Mardashy Mix": ["Hamo El Mardashy"]
     }
   },
   {
-    title: "Eras & Decades",
+    title: "Trending & New",
     mixes: {
-      "90s Hits": ["عمرو دياب 90", "اغاني تسعينات"],
-      "2000s Hits": ["تامر حسني 2000", "اغاني 2000"],
-      "Golden Oldies": ["عبد الحليم حافظ", "ام كلثوم", "فيروز"],
-      "New 2024": ["اغاني جديدة 2024", "تريند 2024"]
+      "Trending Egypt": ["Trending Egypt"],
+      "Top Hits 2024": ["2024", "اغاني جديدة"]
     }
   }
 ];
 
-// بنجمع كل الميكسات في مكان واحد
 const ALL_MIXES = {};
 MIX_SECTIONS.forEach(sec => {
   for (const [name, queries] of Object.entries(sec.mixes)) {
@@ -88,7 +84,6 @@ const FILLED = new Set(['play', 'pause', 'next', 'prev', 'heartF']);
 const ic = n => `<svg viewBox="0 0 24 24" class="ic${FILLED.has(n) ? ' f' : ''}" aria-hidden="true">${P[n]}</svg>`;
 const greet = () => { const h = new Date().getHours(); return h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'; };
 
-// دالة لخلط الكروت عشان تظهر بشكل مختلف كل مرة (بتتجدد)
 const shuffleArray = arr => arr.sort(() => Math.random() - 0.5);
 
 const row = (t, c, i) => {
@@ -116,10 +111,8 @@ const V = {
   home() {
     const rc = st.recent.slice(0, 6); lists.rc = rc;
     
-    // بناء كروت الميكسات
     let mixesHtml = '';
     MIX_SECTIONS.forEach(sec => {
-      // بنخلط الكروت جوة القسم عشان تبان متجددة
       const mixNames = shuffleArray(Object.keys(sec.mixes));
       
       const cards = mixNames.map(mixName => `
@@ -285,22 +278,22 @@ document.addEventListener('click', e => {
 
   if (a === 'mix') {
     const mixName = d.mix;
-    el.innerHTML = `<div class="chips"><button class="chip" data-act="backhome">${ic('back')}Back</button></div><h2 class="g">${esc(mixName)}</h2><p class="ld">Building your mix...</p>`;
     const queries = ALL_MIXES[mixName] || [];
     
-    // بنجيب النتايج من كل المغنيين اللي في الميكس ونخلطهم
-    Promise.all(queries.map(q => src.search(q).catch(() => []))).then(results => {
-      let allTracks = results.flat();
-      const seen = new Set();
-      allTracks = allTracks.filter(x => { const k = x.title + x.artist; return seen.has(k) ? false : seen.add(k); });
-      
-      if (allTracks.length > 0) {
-        allTracks.sort(() => Math.random() - 0.5); // شفل عشوائي عشان الميكس يتجدد
-        play(allTracks, 0);
+    // التعديل هنا: بنبعت للـ Worker كلمة MIX: عشان يروح يجيب الداتا من Deezer
+    let workerQuery = "MIX:" + queries.join(',');
+    
+    el.innerHTML = `<div class="chips"><button class="chip" data-act="backhome">${ic('back')}Back</button></div><h2 class="g">${esc(mixName)}</h2><p class="ld">Building your mix from external charts...</p>`;
+    
+    src.search(workerQuery).then(tracks => {
+      if (tracks.length > 0) {
+        play(tracks, 0);
         go('home');
       } else {
         el.innerHTML = `<p class="er">Could not find songs for this mix right now.</p><button class="chip" data-act="backhome">Back</button>`;
       }
+    }).catch(() => {
+        el.innerHTML = `<p class="er">Error building mix.</p><button class="chip" data-act="backhome">Back</button>`;
     });
     return;
   }
