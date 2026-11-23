@@ -11,3 +11,9 @@ export const trendingRaw = async () => {
   if (!res.ok) throw new Error("Trending failed");
   return await res.json();
 };
+
+export const artistRaw = async (id) => {
+  const res = await fetch(`${PROXY_URL}/artist?id=${id}`);
+  if (!res.ok) throw new Error("Artist fetch failed");
+  return await res.json();
+};
