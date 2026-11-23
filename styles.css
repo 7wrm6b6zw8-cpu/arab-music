@@ -1,7 +1,7 @@
 :root{--bg:#121212;--card:#2a2a2a;--g:#1ED760;--t:#fff;--t2:#b3b3b3;--sa-t:env(safe-area-inset-top,0px);--sa-b:env(safe-area-inset-bottom,0px)}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html{background:var(--bg)}
-body{margin:0;min-height:100vh;background:linear-gradient(180deg,#1f3d2e 0,#121212 320px) no-repeat,var(--bg);color:var(--t);font-family:'Tajawal',system-ui,sans-serif;font-size:15px;line-height:1.4}
+body{margin:0;min-height:100vh;background:linear-gradient(180deg,#1f3d2e 0,#121212 320px) no-repeat,var(--bg);color:var(--t);font-family:'Inter','Tajawal',system-ui,sans-serif;font-size:15px;line-height:1.4}
 button{font:inherit;color:inherit;cursor:pointer}
 .ic{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;display:block}
 .ic.f{fill:currentColor;stroke-width:1}
@@ -61,3 +61,5 @@ input[type=search]#q::placeholder{color:#6a6a6a}
 .vol input{flex:1;margin:0!important}
 .q{padding:12px 0;border-bottom:1px solid rgba(255,255,255,.08);font-size:15px}
 .q.cur{color:var(--g);font-weight:700}
+
+.m b,.m small,.mt b,.mt small,.gc b,.q,#full>h2,#full>small{unicode-bidi:plaintext;text-align:left}

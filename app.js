@@ -33,25 +33,25 @@ P.heartF = P.heart;
 P.rep1 = P.rep + '<path d="M11 10.5l1.2-1v6" stroke-width="1.6"/>';
 const FILLED = new Set(['play', 'pause', 'next', 'prev', 'heartF']);
 const ic = n => `<svg viewBox="0 0 24 24" class="ic${FILLED.has(n) ? ' f' : ''}" aria-hidden="true">${P[n]}</svg>`;
-const greet = () => new Date().getHours() < 12 ? 'صباح الخير' : 'مساء الخير';
+const greet = () => { const h = new Date().getHours(); return h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'; };
 
 const row = (t, c, i) => {
   const a = `data-c="${esc(c)}" data-i="${i}"`, f = isFav(t);
-  return `<div class="row"><img src="${esc(t.cover)}" alt="" loading="lazy"><div class="m" data-act="play" ${a}><b>${esc(t.title)}</b><small>${esc(t.artist)}${t.album ? ' · ' + esc(t.album) : ''}</small></div><button data-act="fav" ${a} class="${f ? 'on' : ''}" aria-label="المفضلة">${ic(f ? 'heartF' : 'heart')}</button>${c.startsWith('pl:') ? `<button data-act="rm" ${a} aria-label="حذف من القائمة">${ic('x')}</button>` : `<button data-act="add" ${a} aria-label="إضافة إلى قائمة">${ic('plus')}</button>`}</div>`;
+  return `<div class="row"><img src="${esc(t.cover)}" alt="" loading="lazy"><div class="m" data-act="play" ${a}><b>${esc(t.title)}</b><small>${esc(t.artist)}${t.album ? ' · ' + esc(t.album) : ''}</small></div><button data-act="fav" ${a} class="${f ? 'on' : ''}" aria-label="Favorite">${ic(f ? 'heartF' : 'heart')}</button>${c.startsWith('pl:') ? `<button data-act="rm" ${a} aria-label="Remove from playlist">${ic('x')}</button>` : `<button data-act="add" ${a} aria-label="Add to playlist">${ic('plus')}</button>`}</div>`;
 };
-const list = (a, c) => { lists[c] = a; return a.length ? a.map((t, i) => row(t, c, i)).join('') : '<p class="e">لا شيء هنا بعد. اضغط على القلب بجانب أي أغنية لحفظها.</p>'; };
+const list = (a, c) => { lists[c] = a; return a.length ? a.map((t, i) => row(t, c, i)).join('') : '<p class="e">Nothing here yet. Tap the heart next to any song to save it.</p>'; };
 const chip = n => `<button class="chip" data-act="q" data-q="${esc(n)}">${esc(n)}</button>`;
 
 let tok = 0;
 async function run(q) {
   const r = $('#res'), n = ++tok; if (!r) return;
   if (q.length < 2) { r.innerHTML = ''; return; }
-  r.innerHTML = '<p class="ld">جارٍ البحث…</p>';
+  r.innerHTML = '<p class="ld">Searching…</p>';
   try {
     let a = await src.search(q); if (n !== tok) return;
     const seen = new Set(); a = a.filter(t => { const k = (t.title + t.artist).toLowerCase(); return seen.has(k) ? false : seen.add(k); });
-    r.innerHTML = a.length ? list(a, 's') : `<p class="e">لا نتائج لـ «${esc(q)}». جرّب كلمات أخرى.</p>`;
-  } catch { if (n === tok) r.innerHTML = '<p class="er">تعذر الاتصال بمصدر الموسيقى. تحقق من الإنترنت وحاول مرة أخرى.</p>'; }
+    r.innerHTML = a.length ? list(a, 's') : `<p class="e">No results for “${esc(q)}”. Try different words.</p>`;
+  } catch { if (n === tok) r.innerHTML = '<p class="er">Couldn’t reach the music source. Check your connection and try again.</p>'; }
 }
 const ch = () => { const c = $('#ch'); if (c) c.innerHTML = st.hist.filter(h => h.includes($('#q').value)).slice(0, 8).map(chip).join(''); };
 
@@ -60,21 +60,21 @@ const V = {
     const rc = st.recent.slice(0, 6); lists.rc = rc;
     el.innerHTML = `<h2 class="g">${greet()}</h2>` +
       (rc.length ? '<div class="grid">' + rc.map((t, i) => `<div class="gc" data-act="play" data-c="rc" data-i="${i}"><img src="${esc(t.cover)}" alt="" loading="lazy"><b>${esc(t.title)}</b></div>`).join('') + '</div>' : '') +
-      (st.fav.length ? '<h2>مفضلتك</h2>' + list(st.fav.slice(0, 3), 'hf') : '') +
-      '<h2>الفنانون الرائجون</h2><div class="chips" id="ar"></div><h2>الأكثر رواجًا</h2><div id="tr"><p class="ld">جارٍ التحميل…</p></div>';
+      (st.fav.length ? '<h2>Your favorites</h2>' + list(st.fav.slice(0, 3), 'hf') : '') +
+      '<h2>Trending artists</h2><div class="chips" id="ar"></div><h2>Trending now</h2><div id="tr"><p class="ld">Loading…</p></div>';
     src.trending().then(a => { if (st.view !== 'home') return; $('#ar').innerHTML = [...new Set(a.map(t => t.artist))].slice(0, 10).map(chip).join(''); $('#tr').innerHTML = list(a.slice(0, 20), 'tr'); })
-      .catch(() => { if (st.view === 'home') $('#tr').innerHTML = '<p class="er">تعذر تحميل الأغاني. تحقق من الاتصال.</p>'; });
+      .catch(() => { if (st.view === 'home') $('#tr').innerHTML = '<p class="er">Couldn’t load songs. Check your connection.</p>'; });
   },
-  search() { el.innerHTML = `<h2 class="g">بحث</h2><input id="q" type="search" placeholder="ماذا تريد أن تسمع؟" value="${esc(st.q)}" enterkeyhint="search" autocomplete="off"><div class="chips" id="ch"></div><div id="res"></div>`; ch(); run(st.q); },
-  library() { el.innerHTML = `<h2 class="g">مكتبتي</h2><div class="chips"><button class="chip" data-go="favorites">المفضلة (${st.fav.length})</button><button class="chip" data-go="playlists">القوائم (${Object.keys(st.pl).length})</button></div><h2>تم تشغيله مؤخرًا</h2>` + list(st.recent, 'rc'); },
-  favorites() { el.innerHTML = '<h2 class="g">المفضلة</h2>' + list(st.fav, 'fv'); },
+  search() { el.innerHTML = `<h2 class="g">Search</h2><input id="q" type="search" dir="auto" placeholder="What do you want to listen to?" value="${esc(st.q)}" enterkeyhint="search" autocomplete="off"><div class="chips" id="ch"></div><div id="res"></div>`; ch(); run(st.q); },
+  library() { el.innerHTML = `<h2 class="g">Your library</h2><div class="chips"><button class="chip" data-go="favorites">Favorites (${st.fav.length})</button><button class="chip" data-go="playlists">Playlists (${Object.keys(st.pl).length})</button></div><h2>Recently played</h2>` + list(st.recent, 'rc'); },
+  favorites() { el.innerHTML = '<h2 class="g">Favorites</h2>' + list(st.fav, 'fv'); },
   playlists() {
     const n = st.open;
-    if (n && st.pl[n]) el.innerHTML = `<div class="chips"><button class="chip" data-act="back">${ic('back')}رجوع</button><button class="chip" data-act="pldel" data-n="${esc(n)}">حذف القائمة</button></div><h2 class="g">${esc(n)}</h2>` + list(st.pl[n], 'pl:' + n);
-    else el.innerHTML = '<h2 class="g">القوائم</h2><button class="chip" data-act="plnew">' + ic('plus') + 'قائمة جديدة</button>' + (Object.keys(st.pl).map(k => `<div class="row" data-act="plopen" data-n="${esc(k)}"><div class="ph">${ic('list')}</div><div class="m"><b>${esc(k)}</b><small>${st.pl[k].length} أغنية</small></div></div>`).join('') || '<p class="e">أنشئ قائمتك الأولى، أو اضغط على + بجانب أي أغنية.</p>');
+    if (n && st.pl[n]) el.innerHTML = `<div class="chips"><button class="chip" data-act="back">${ic('back')}Back</button><button class="chip" data-act="pldel" data-n="${esc(n)}">Delete playlist</button></div><h2 class="g">${esc(n)}</h2>` + list(st.pl[n], 'pl:' + n);
+    else el.innerHTML = '<h2 class="g">Playlists</h2><button class="chip" data-act="plnew">' + ic('plus') + 'New playlist</button>' + (Object.keys(st.pl).map(k => `<div class="row" data-act="plopen" data-n="${esc(k)}"><div class="ph">${ic('list')}</div><div class="m"><b>${esc(k)}</b><small>${st.pl[k].length} songs</small></div></div>`).join('') || '<p class="e">Create your first playlist, or tap + next to any song.</p>');
   }
 };
-const NAV = [['home', 'home', 'الرئيسية'], ['search', 'search', 'بحث'], ['library', 'library', 'مكتبتي'], ['favorites', 'heart', 'المفضلة'], ['playlists', 'list', 'القوائم']];
+const NAV = [['home', 'home', 'Home'], ['search', 'search', 'Search'], ['library', 'library', 'Library'], ['favorites', 'heart', 'Favorites'], ['playlists', 'list', 'Playlists']];
 function go(v) { st.view = v; st.open = null; $('#nav').innerHTML = NAV.map(([k, i, n]) => `<button data-go="${k}" class="${k === v ? 'on' : ''}"><i>${ic(i)}</i>${n}</button>`).join(''); V[v](); scrollTo(0, 0); }
 
 const ms = navigator.mediaSession;
@@ -100,7 +100,7 @@ function play(l, i) { st.queue = l.slice(); st.idx = i; load(); }
 async function load() {
   const t = st.queue[st.idx]; if (!t) return; st.err = '';
   msMeta(t);
-  try { au.src = src.streamUrl(t); drawP(); await au.play(); } catch (e) { if (e.name !== 'AbortError') st.err = 'تعذر تشغيل هذه الأغنية. جرّب أغنية أخرى.'; }
+  try { au.src = src.streamUrl(t); drawP(); await au.play(); } catch (e) { if (e.name !== 'AbortError') st.err = 'Couldn’t play this song. Try another one.'; }
   st.recent = [t, ...st.recent.filter(x => x.id !== t.id)].slice(0, 30); S('recent', st.recent); drawP();
 }
 function next(auto) {
@@ -112,7 +112,7 @@ function next(auto) {
 }
 function prev() { if (!st.queue.length) return; if (au.currentTime > 3) { au.currentTime = 0; return; } st.idx = (st.idx - 1 + st.queue.length) % st.queue.length; load(); }
 au.onended = () => next(true);
-au.onerror = () => { st.err = 'هذه الأغنية غير متاحة حاليًا.'; drawP(); };
+au.onerror = () => { st.err = 'This song isn’t available right now.'; drawP(); };
 au.onplay = au.onpause = au.onloadedmetadata = () => drawP();
 au.ontimeupdate = () => {
   const p = $('#mpb'); if (p) p.style.width = (au.duration ? au.currentTime / au.duration * 100 : 0) + '%';
@@ -123,8 +123,8 @@ function drawP() {
   const t = st.queue[st.idx], m = $('#mini'); m.hidden = !t; if (!t) return;
   if (ms) ms.playbackState = au.paused ? 'paused' : 'playing';
   const pl = ic(au.paused ? 'play' : 'pause'), w = au.duration ? au.currentTime / au.duration * 100 : 0;
-  m.innerHTML = `<img src="${esc(t.cover)}" alt=""><div class="mt" data-act="expand"><b>${esc(t.title)}</b><small>${st.err ? esc(st.err) : esc(t.artist)}</small></div><button data-act="pp" aria-label="تشغيل أو إيقاف">${pl}</button><button data-act="next" aria-label="التالي">${ic('next')}</button><div class="mp"><i id="mpb" style="width:${w}%"></i></div>`;
-  if (!$('#full').hidden) $('#full').innerHTML = `<button data-act="close" class="cl" aria-label="إغلاق">${ic('down')}</button><img class="big" src="${esc(t.cover)}" alt=""><h2>${esc(t.title)}</h2><small>${esc(t.artist)}</small>${st.err ? `<p class="er">${esc(st.err)}</p>` : ''}<input id="seek" type="range" min="0" max="${au.duration || 0}" step="1" value="${au.currentTime}" dir="ltr"><div class="tm" dir="ltr"><span id="ct">${fmt(au.currentTime)}</span><span id="dt">${fmt(au.duration)}</span></div><div class="ctl" dir="ltr"><button data-act="shuf" class="${st.shuf ? 'on' : ''}" aria-label="عشوائي">${ic('shuf')}</button><button data-act="prev" aria-label="السابق">${ic('prev')}</button><button class="pp" data-act="pp" aria-label="تشغيل أو إيقاف">${pl}</button><button data-act="next" aria-label="التالي">${ic('next')}</button><button data-act="rep" class="${st.rep ? 'on' : ''}" aria-label="تكرار">${ic(st.rep === 2 ? 'rep1' : 'rep')}</button></div><div class="vol" dir="ltr"><button data-act="mute" aria-label="كتم">${ic(au.muted ? 'mute' : 'vol')}</button><input id="vol" type="range" min="0" max="1" step=".05" value="${au.volume}"></div><h2>قائمة التشغيل</h2>` + st.queue.map((x, i) => `<div class="q ${i === st.idx ? 'cur' : ''}" data-act="qplay" data-i="${i}">${esc(x.title)} — ${esc(x.artist)}</div>`).join('');
+  m.innerHTML = `<img src="${esc(t.cover)}" alt=""><div class="mt" data-act="expand"><b>${esc(t.title)}</b><small>${st.err ? esc(st.err) : esc(t.artist)}</small></div><button data-act="pp" aria-label="Play or pause">${pl}</button><button data-act="next" aria-label="Next">${ic('next')}</button><div class="mp"><i id="mpb" style="width:${w}%"></i></div>`;
+  if (!$('#full').hidden) $('#full').innerHTML = `<button data-act="close" class="cl" aria-label="Close">${ic('down')}</button><img class="big" src="${esc(t.cover)}" alt=""><h2>${esc(t.title)}</h2><small>${esc(t.artist)}</small>${st.err ? `<p class="er">${esc(st.err)}</p>` : ''}<input id="seek" type="range" min="0" max="${au.duration || 0}" step="1" value="${au.currentTime}" dir="ltr"><div class="tm" dir="ltr"><span id="ct">${fmt(au.currentTime)}</span><span id="dt">${fmt(au.duration)}</span></div><div class="ctl" dir="ltr"><button data-act="shuf" class="${st.shuf ? 'on' : ''}" aria-label="Shuffle">${ic('shuf')}</button><button data-act="prev" aria-label="Previous">${ic('prev')}</button><button class="pp" data-act="pp" aria-label="Play or pause">${pl}</button><button data-act="next" aria-label="Next">${ic('next')}</button><button data-act="rep" class="${st.rep ? 'on' : ''}" aria-label="Repeat">${ic(st.rep === 2 ? 'rep1' : 'rep')}</button></div><div class="vol" dir="ltr"><button data-act="mute" aria-label="Mute">${ic(au.muted ? 'mute' : 'vol')}</button><input id="vol" type="range" min="0" max="1" step=".05" value="${au.volume}"></div><h2>Queue</h2>` + st.queue.map((x, i) => `<div class="q ${i === st.idx ? 'cur' : ''}" data-act="qplay" data-i="${i}">${esc(x.title)} — ${esc(x.artist)}</div>`).join('');
 }
 
 document.addEventListener('click', e => {
@@ -134,12 +134,12 @@ document.addEventListener('click', e => {
   const A = {
     play: () => play(lists[d.c], +d.i),
     fav: () => { st.fav = isFav(t) ? st.fav.filter(x => x.id !== t.id) : [t, ...st.fav]; S('fav', st.fav); b.innerHTML = ic(isFav(t) ? 'heartF' : 'heart'); b.classList.toggle('on', isFav(t)); },
-    add: () => { const k = (prompt('اسم القائمة' + (Object.keys(st.pl).length ? '\nالقوائم: ' + Object.keys(st.pl).join('، ') : '')) || '').trim(); if (!k) return; st.pl[k] = st.pl[k] || []; if (!st.pl[k].some(x => x.id === t.id)) st.pl[k].push(t); S('pl', st.pl); b.innerHTML = ic('check'); b.classList.add('on'); },
+    add: () => { const k = (prompt('Playlist name' + (Object.keys(st.pl).length ? '\nPlaylists: ' + Object.keys(st.pl).join(', ') : '')) || '').trim(); if (!k) return; st.pl[k] = st.pl[k] || []; if (!st.pl[k].some(x => x.id === t.id)) st.pl[k].push(t); S('pl', st.pl); b.innerHTML = ic('check'); b.classList.add('on'); },
     rm: () => { st.pl[d.c.slice(3)].splice(+d.i, 1); S('pl', st.pl); V.playlists(); },
     q: () => { st.q = d.q; go('search'); },
-    plnew: () => { const k = (prompt('اسم القائمة الجديدة') || '').trim(); if (k) { st.pl[k] = st.pl[k] || []; S('pl', st.pl); V.playlists(); } },
+    plnew: () => { const k = (prompt('New playlist name') || '').trim(); if (k) { st.pl[k] = st.pl[k] || []; S('pl', st.pl); V.playlists(); } },
     plopen: () => { st.open = d.n; V.playlists(); },
-    pldel: () => { if (confirm('حذف هذه القائمة؟')) { delete st.pl[d.n]; S('pl', st.pl); st.open = null; V.playlists(); } },
+    pldel: () => { if (confirm('Delete this playlist?')) { delete st.pl[d.n]; S('pl', st.pl); st.open = null; V.playlists(); } },
     back: () => { st.open = null; V.playlists(); },
     expand: () => { $('#full').hidden = false; drawP(); },
     close: () => { $('#full').hidden = true; },
