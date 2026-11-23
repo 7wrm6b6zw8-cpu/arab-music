@@ -11,6 +11,16 @@ header h1{margin:0;font-size:22px;font-weight:800;letter-spacing:.5px}
 main{padding:8px 16px calc(150px + var(--sa-b))}
 h2{margin:26px 0 10px;font-size:20px;font-weight:800}
 h2.g{margin-top:14px;font-size:26px}
+
+/* تصميم الكروت اللي بتتسحب بالعرض */
+.h-scroll{display:flex;gap:16px;overflow-x:auto;scroll-snap-type:x mandatory;padding-bottom:10px;margin:0 -16px;padding-left:16px;padding-right:16px;scrollbar-width:none}
+.h-scroll::-webkit-scrollbar{display:none}
+.card{flex:0 0 150px;scroll-snap-align:start;background:linear-gradient(180deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.02) 100%);border-radius:8px;padding:12px;transition:background .3s;display:flex;flex-direction:column;gap:8px;cursor:pointer}
+.card:active{background:rgba(255,255,255,0.2)}
+.card img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:6px;box-shadow:0 8px 24px rgba(0,0,0,0.5);background:var(--card)}
+.card b{font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:4px}
+.card small{font-size:13px;color:var(--t2);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.3}
+
 .row{display:flex;align-items:center;gap:12px;padding:6px 0}
 .row>img,.row>.ph{width:54px;height:54px;border-radius:6px;flex:none;object-fit:cover;background:var(--card)}
 .ph{display:flex;align-items:center;justify-content:center;color:var(--t2)}
@@ -20,7 +30,7 @@ h2.g{margin-top:14px;font-size:26px}
 .row>button{width:44px;height:44px;flex:none;border:0;background:none;color:var(--t2);display:flex;align-items:center;justify-content:center;padding:0}
 .row>button.on{color:var(--g)}
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.gc{display:flex;align-items:center;gap:10px;height:56px;background:rgba(255,255,255,.1);border-radius:6px;overflow:hidden;padding-inline-end:8px}
+.gc{display:flex;align-items:center;gap:10px;height:56px;background:rgba(255,255,255,.1);border-radius:6px;overflow:hidden;padding-inline-end:8px;cursor:pointer}
 .gc img{width:56px;height:56px;object-fit:cover;flex:none;background:var(--card)}
 .gc b{font-size:13px;font-weight:700;line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .chips{display:flex;flex-wrap:wrap;gap:8px}
@@ -62,4 +72,4 @@ input[type=search]#q::placeholder{color:#6a6a6a}
 .q{padding:12px 0;border-bottom:1px solid rgba(255,255,255,.08);font-size:15px}
 .q.cur{color:var(--g);font-weight:700}
 
-.m b,.m small,.mt b,.mt small,.gc b,.q,#full>h2,#full>small{unicode-bidi:plaintext;text-align:left}
+.m b,.m small,.mt b,.mt small,.gc b,.card b,.card small,.q,#full>h2,#full>small{unicode-bidi:plaintext;text-align:left}
