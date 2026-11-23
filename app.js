@@ -9,6 +9,7 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': 
 const fmt = s => isFinite(s) && s > 0 ? Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0') : '0:00';
 const isFav = t => st.fav.some(x => x.id === t.id);
 
+// الأقسام والميكسات (أسماء المغنيين بس)
 const MIX_SECTIONS = [
   {
     title: "Made For You",
@@ -23,10 +24,10 @@ const MIX_SECTIONS = [
   {
     title: "Popular Genres",
     mixes: {
-      "Mahraganat": ["Hamo El Mardashy", "Mohamed Ramadan", "Hassan Shakosh", "Essam Sasa", "Omar Kamal"],
+      "Mahraganat": ["Hamo El Mardashy", "Mohamed Ramadan", "Hassan Shakosh", "Essam Sasa"],
       "Arabic Rap": ["Wegz", "Marwan Pablo", "Afroto", "Abyusif", "Mousv"],
       "Pop Arabic": ["Amr Diab", "Tamer Hosny", "Sherine", "Ramy Sabry", "Angham"],
-      "Tarab Classics": ["Umm Kulthum", "Abdel Halim Hafez", "Fairuz", "Warda", "Mohammed Abdel Wahab"]
+      "Tarab Classics": ["Umm Kulthum", "Abdel Halim Hafez", "Fairuz", "Warda"]
     }
   },
   {
@@ -45,8 +46,7 @@ const MIX_SECTIONS = [
   {
     title: "Trending & New",
     mixes: {
-      "Trending Egypt": ["Trending Egypt"],
-      "Top Hits 2024": ["2024", "اغاني جديدة"]
+      "Trending Egypt": ["Trending Egypt"]
     }
   }
 ];
@@ -280,10 +280,10 @@ document.addEventListener('click', e => {
     const mixName = d.mix;
     const queries = ALL_MIXES[mixName] || [];
     
-    // التعديل هنا: بنبعت للـ Worker كلمة MIX: عشان يروح يجيب الداتا من Deezer
+    // بنبعت للـ Worker أسماء المغنيين عشان يجيب Top Tracks من Deezer
     let workerQuery = "MIX:" + queries.join(',');
     
-    el.innerHTML = `<div class="chips"><button class="chip" data-act="backhome">${ic('back')}Back</button></div><h2 class="g">${esc(mixName)}</h2><p class="ld">Building your mix from external charts...</p>`;
+    el.innerHTML = `<div class="chips"><button class="chip" data-act="backhome">${ic('back')}Back</button></div><h2 class="g">${esc(mixName)}</h2><p class="ld">Building your mix...</p>`;
     
     src.search(workerQuery).then(tracks => {
       if (tracks.length > 0) {
