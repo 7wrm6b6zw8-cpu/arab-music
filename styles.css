@@ -97,3 +97,10 @@ input[type=search]#q::placeholder{color:#6a6a6a}
 .gc .ph{width:56px;height:56px;flex:none;border-radius:0;font-size:18px}
 #toast{position:fixed;left:50%;bottom:calc(140px + var(--sa-b));transform:translate(-50%,20px);background:#fff;color:#121212;padding:10px 16px;border-radius:999px;font-size:14px;font-weight:500;opacity:0;pointer-events:none;transition:.25s;z-index:80;max-width:86vw}
 #toast.show{opacity:1;transform:translate(-50%,0)}
+
+/* ---- mix pages and browse grid ---- */
+.mhero{margin:14px 0 6px;border-radius:14px;padding:22px 18px;min-height:150px;display:flex;flex-direction:column;justify-content:flex-end;gap:4px;background:linear-gradient(160deg,hsl(var(--h) 55% 38%),hsl(var(--h) 45% 14%))}
+.mhero h2{margin:0;font-size:30px}
+.mhero small{color:rgba(255,255,255,.8);font-size:13px;letter-spacing:.3px}
+.bgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.bgrid .mc{width:auto;height:110px}

@@ -5,7 +5,7 @@ const S = (k, v) => { try { localStorage.setItem('am_' + k, JSON.stringify(v)); 
 const st = { fav: L('fav', []), recent: L('recent', []), pl: L('pl', {}), hist: L('hist', []), ap: L('ap', {}), queue: [], idx: -1, shuf: false, rep: 0, view: 'home', arg: null, tab: 'home', stack: [], open: null, q: '', err: '', ext: false, fails: 0 };
 const au = new Audio(); au.preload = 'none';
 const lists = {}, byId = new Map();
-let rtok = 0, specs = [];
+let rtok = 0; const mixReg = new Map();
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fmt = s => isFinite(s) && s > 0 ? Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0') : '0:00';
 const isFav = t => st.fav.some(x => x.id === t.id);
@@ -37,6 +37,7 @@ const ic = n => `<svg viewBox="0 0 24 24" class="ic${FILLED.has(n) ? ' f' : ''}"
 const art = t => t.cover ? `<img src="${esc(t.cover)}" alt="" loading="lazy">` : `<div class="ph" style="--h:${hue(t.title)}" data-lz="${t.id}">${initial(t.title)}</div>`;
 const av = a => `<div class="av" data-act="artist" data-id="${a.id}">${a.cover ? `<img class="c" src="${esc(a.cover)}" alt="">` : `<div class="ph c" style="--h:${hue(a.name)}" data-az="${a.id}" data-cls="c">${initial(a.name)}</div>`}<span>${esc(a.name)}</span></div>`;
 const ac = a => `<div class="ac" data-act="album" data-id="${a.id}">${a.cover ? `<img src="${esc(a.cover)}" alt="" loading="lazy">` : `<div class="ph" style="--h:${hue(a.title)}">${initial(a.title)}</div>`}<b>${esc(a.title)}</b><small>${esc([a.year, a.artist].filter(Boolean).join(' · '))}</small></div>`;
+const mixCard = s => { mixReg.set(s.key, s); return `<div class="mc" data-act="mixopen" data-k="${esc(s.key)}" style="--h:${s.hue}"><b>${esc(s.title)}</b><small>${esc(s.sub || '')}</small></div>`; };
 const row = (t, c, i) => {
   const a = `data-c="${esc(c)}" data-i="${i}"`, f = isFav(t);
   const who = t.artistId ? `<span class="lnk" data-act="artist" data-id="${t.artistId}">${esc(t.artist)}</span>` : esc(t.artist);
@@ -60,15 +61,18 @@ new MutationObserver(lazy).observe(el, { childList: true, subtree: true });
 let tok = 0;
 async function run(q) {
   const r = $('#res'), n = ++tok; if (!r) return;
-  if (q.length < 2) { r.innerHTML = ''; return; }
+  if (q.length < 2) { r.innerHTML = '<h2>Browse all</h2><div class="bgrid">' + api.MOODS.map(mixCard).join('') + '</div>'; return; }
   r.innerHTML = '<p class="ld">Searching…</p>';
   try {
     const x = await api.search(q); if (n !== tok || !$('#res')) return;
     const top = x.topArtist;
     r.innerHTML = (top ? `<div class="trc" data-act="artist" data-id="${top.id}">${top.cover ? `<img class="c" src="${esc(top.cover)}" alt="">` : `<div class="ph c" style="--h:${hue(top.name)}">${initial(top.name)}</div>`}<div><b>${esc(top.name)}</b><small>Artist · ${top.count} songs · all songs and albums</small></div>${ic('fwd')}</div>` : '')
-      + (x.artists.length > 1 ? '<h2>Artists</h2><div class="hs">' + x.artists.map(av).join('') + '</div>' : '')
-      + (x.songs.length ? '<h2>Songs</h2>' + list(x.songs, 's') : (x.artists.length ? '' : `<p class="e">No results for “${esc(q)}”. Try different words.</p>`))
-      + (x.albums.length ? '<h2>Albums</h2><div class="hs">' + x.albums.map(ac).join('') + '</div>' : '');
+      + (x.popular.length ? '<h2>Popular songs</h2>' + list(x.popular, 'sp') + `<button class="chip" data-act="artist" data-id="${top.id}">See all ${top.count} songs</button>` : '')
+      + (x.latest.length ? '<h2>Latest releases</h2>' + list(x.latest, 'sl') : '')
+      + (x.artists.length > 1 || (x.artists.length && !top) ? '<h2>Artists</h2><div class="hs">' + x.artists.map(av).join('') + '</div>' : '')
+      + (x.songs.length ? '<h2>' + (top ? 'More songs' : 'Songs') + '</h2>' + list(x.songs, 's') : '')
+      + (x.albums.length ? '<h2>Albums</h2><div class="hs">' + x.albums.map(ac).join('') + '</div>' : '')
+      + (top || x.artists.length || x.songs.length ? '' : `<p class="e">No results for “${esc(q)}”. Try different words.</p>`);
   } catch { if (n === tok && $('#res')) $('#res').innerHTML = '<p class="er">Couldn’t reach the music source. Check your connection and try again.</p>'; }
 }
 const ch = () => { const c = $('#ch'); if (c) c.innerHTML = st.hist.filter(h => h.includes($('#q').value)).slice(0, 8).map(chip).join(''); };
@@ -79,9 +83,9 @@ const V = {
   home() {
     const rc = st.recent.slice(0, 6); lists.rc = rc; rc.forEach(t => byId.set(t.id, t));
     el.innerHTML = `<h2 class="g">${greet()}</h2>` + (rc.length ? '<div class="grid">' + rc.map((t, i) => `<div class="gc" data-act="play" data-c="rc" data-i="${i}">${art(t)}<b>${esc(t.title)}</b></div>`).join('') + '</div>' : '')
-      + '<div id="mx"></div><div id="na"></div><div id="pa"></div>' + (st.fav.length ? '<h2>Your favorites</h2>' + list(st.fav.slice(0, 3), 'hf') : '') + '<h2>Trending now</h2><div id="tr"><p class="ld">Loading…</p></div>';
+      + '<div id="mx"></div><h2>Moods and genres</h2><div class="hs">' + api.MOODS.map(mixCard).join('') + '</div><div id="na"></div><div id="pa"></div>' + (st.fav.length ? '<h2>Your favorites</h2>' + list(st.fav.slice(0, 3), 'hf') : '') + '<h2>Trending now</h2><div id="tr"><p class="ld">Loading…</p></div>';
     const k = rtok, ok = () => k === rtok && st.view === 'home';
-    api.mixSpecs(topIds()).then(sp => { if (!ok() || !sp.length) return; specs = sp; $('#mx').innerHTML = '<h2>Made for you</h2><div class="hs">' + sp.map((s, i) => `<div class="mc" data-act="mix" data-i="${i}" style="--h:${s.hue}"><b>${esc(s.title)}</b><small>${esc(s.sub)}</small></div>`).join('') + '</div>'; }).catch(() => {});
+    api.mixSpecs(topIds()).then(sp => { if (!ok() || !sp.length) return; $('#mx').innerHTML = '<h2>Made for you</h2><div class="hs">' + sp.map(mixCard).join('') + '</div>'; }).catch(() => {});
     api.home().then(h => { if (!ok()) return; if (h.albums.length) $('#na').innerHTML = '<h2>New albums</h2><div class="hs">' + h.albums.slice(0, 10).map(ac).join('') + '</div>'; $('#tr').innerHTML = list(h.songs.slice(0, 25), 'tr'); })
       .catch(() => { if (ok()) $('#tr').innerHTML = '<p class="er">Couldn’t load songs. Check your connection.</p>'; });
     api.directory().then(d => { if (ok() && d.length) $('#pa').innerHTML = '<h2>Popular artists</h2><div class="hs">' + d.slice(0, 14).map(av).join('') + '</div>'; }).catch(() => {});
@@ -91,10 +95,10 @@ const V = {
     el.innerHTML = backBar() + '<p class="ld">Loading…</p>'; const k = rtok;
     try {
       const a = await api.artist(id); if (k !== rtok) return;
-      const pop = a.songs.slice().sort((x, y) => y.plays - x.plays).slice(0, 10);
+      const pop = a.songs.slice().sort((x, y) => y.plays - x.plays).slice(0, 10), late = a.songs.slice().sort((x, y) => y.id - x.id).filter(s => !pop.some(p => p.id === s.id)).slice(0, 5);
       el.innerHTML = backBar() + `<div class="hero">${a.cover ? `<img class="c" src="${esc(a.cover)}" alt="">` : `<div class="ph c" style="--h:${hue(a.name)}">${initial(a.name)}</div>`}<div><small>ARTIST</small><h2>${esc(a.name)}</h2><small>${a.songs.length} songs${a.albums.length ? ' · ' + a.albums.length + ' albums' : ''}</small></div></div>`
         + `<div class="acts"><button class="big" data-act="playall" data-c="ar" aria-label="Play all">${ic('play')}</button><button class="chip" data-act="shufall" data-c="ar">${ic('shuf')}Shuffle</button></div>`
-        + '<h2>Popular</h2>' + list(pop, 'ap') + (a.albums.length ? '<h2>Albums</h2><div class="hs">' + a.albums.map(ac).join('') + '</div>' : '') + `<h2>All songs</h2>` + list(a.songs, 'ar');
+        + '<h2>Popular</h2>' + list(pop, 'ap') + (late.length ? '<h2>Latest releases</h2>' + list(late, 'al2') : '') + (a.albums.length ? '<h2>Albums</h2><div class="hs">' + a.albums.map(ac).join('') + '</div>' : '') + `<h2>All songs</h2>` + list(a.songs, 'ar');
     } catch { if (k === rtok) el.innerHTML = backBar() + '<p class="er">Couldn’t load this artist. Check your connection.</p>'; }
   },
   async album(id) {
@@ -104,6 +108,14 @@ const V = {
       el.innerHTML = backBar() + `<div class="hero">${a.cover ? `<img src="${esc(a.cover)}" alt="">` : `<div class="ph" style="--h:${hue(a.title)}">${initial(a.title)}</div>`}<div><small>ALBUM${a.year ? ' · ' + a.year : ''}</small><h2>${esc(a.title)}</h2>${a.artistId ? `<small class="lnk" data-act="artist" data-id="${a.artistId}">${esc(a.artist)}</small>` : `<small>${esc(a.artist)}</small>`}</div></div>`
         + `<div class="acts"><button class="big" data-act="playall" data-c="al" aria-label="Play all">${ic('play')}</button><button class="chip" data-act="shufall" data-c="al">${ic('shuf')}Shuffle</button></div>` + list(a.songs, 'al');
     } catch { if (k === rtok) el.innerHTML = backBar() + '<p class="er">Couldn’t load this album. Check your connection.</p>'; }
+  },
+  async mix(s) {
+    const k = rtok, hero = `<div class="mhero" style="--h:${s.hue}"><small>MIX</small><h2>${esc(s.title)}</h2><small>${esc(s.sub || '')}</small></div>`;
+    el.innerHTML = backBar() + hero + '<p class="ld">Building your mix…</p>';
+    try {
+      const l = await api.buildMix(s); if (k !== rtok) return;
+      el.innerHTML = backBar() + hero + `<div class="acts"><button class="big" data-act="playall" data-c="mx" aria-label="Play">${ic('play')}</button><button class="chip" data-act="shufall" data-c="mx">${ic('shuf')}Shuffle</button>${s.kind === 'new' ? '' : `<button class="chip" data-act="remix" data-k="${esc(s.key)}">Refresh</button>`}</div>` + (l.length ? list(l, 'mx') : '<p class="e">Couldn’t find songs for this mix right now.</p>');
+    } catch { if (k === rtok) el.innerHTML = backBar() + hero + '<p class="er">Couldn’t build this mix. Check your connection.</p>'; }
   },
   library() { el.innerHTML = `<h2 class="g">Your library</h2><div class="chips"><button class="chip" data-go="favorites">Favorites (${st.fav.length})</button><button class="chip" data-go="playlists">Playlists (${Object.keys(st.pl).length})</button></div><h2>Recently played</h2>` + list(st.recent, 'rc'); },
   favorites() { el.innerHTML = '<h2 class="g">Favorites</h2>' + list(st.fav, 'fv'); },
@@ -117,7 +129,7 @@ const NAV = [['home', 'home', 'Home'], ['search', 'search', 'Search'], ['library
 const NAVV = NAV.map(n => n[0]);
 const renderNav = () => { $('#nav').innerHTML = NAV.map(([k, i, n]) => `<button data-go="${k}" class="${k === st.tab ? 'on' : ''}"><i>${ic(i)}</i>${n}</button>`).join(''); };
 function go(v, arg, o = {}) {
-  if (!o.back) { if (v === 'artist' || v === 'album') st.stack.push({ v: st.view, a: st.arg, y: scrollY }); else st.stack = []; }
+  if (!o.back) { if (v === 'artist' || v === 'album' || v === 'mix') st.stack.push({ v: st.view, a: st.arg, y: scrollY }); else st.stack = []; }
   st.view = v; st.arg = arg; st.open = null; rtok++;
   if (NAVV.includes(v)) st.tab = v;
   renderNav(); V[v](arg);
@@ -233,7 +245,8 @@ document.addEventListener('click', e => {
     goback: () => back(),
     artist: () => { $('#full').hidden = true; go('artist', +d.id); },
     album: () => go('album', +d.id),
-    mix: () => { const s = specs[+d.i]; if (!s) return; toast('Building ' + s.title + '…'); api.buildMix(s).then(l => l.length ? play(l, 0) : toast('Couldn’t build this mix')).catch(() => toast('Couldn’t build this mix')); },
+    mixopen: () => { const s = mixReg.get(d.k); if (s) go('mix', s); },
+    remix: () => { const s = mixReg.get(d.k); if (s) { s.seed = Date.now(); go('mix', s, { back: 1 }); } },
     playall: () => { const l = lists[d.c]; if (l?.length) play(l, 0); },
     shufall: () => { const l = lists[d.c]; if (l?.length) play(api.shuffle(l), 0); },
     expand: () => { $('#full').hidden = false; drawP(); },

@@ -186,19 +186,52 @@ export async function search(q) {
   }
   const sc = s => { const t = norm(s.title + ' ' + s.artist); return toks.filter(k => t.includes(k)).length / (toks.length || 1); };
   found.sort((a, b) => sc(b) - sc(a));
-  let top = artists[0] && artists[0].s >= 45 ? artists[0] : null, albums = [], popular = [];
+  let top = artists[0] && artists[0].s >= 55 ? artists[0] : null, albums = [], popular = [], latest = [];
   if (top) {
-    try { const a = await loadArtist(top.id); top = { ...top, cover: a.cover, count: a.count }; albums = a.albums; popular = expand(a).sort((x, y) => y.plays - x.plays).slice(0, 10); } catch { top = null; }
+    try {
+      const a = await loadArtist(top.id), all = expand(a);
+      top = { ...top, cover: a.cover, count: a.count }; albums = a.albums;
+      popular = dedupe(all.slice().sort((x, y) => y.plays - x.plays)).slice(0, 10);
+      latest = dedupe(all.slice().sort((x, y) => y.id - x.id)).filter(t => !popular.some(p => p.id === t.id)).slice(0, 5);
+    } catch { top = null; }
   }
-  const seen = new Set(), songs = [];
-  [...popular, ...found].forEach(s => { if (!seen.has(s.id)) { seen.add(s.id); songs.push(s); } });
-  const v = { artists, songs: songs.slice(0, 40), albums, topArtist: top && top.s >= 60 ? top : null };
+  const seen = new Set([...popular, ...latest].map(t => t.id)), songs = [];
+  found.forEach(t => { if (!seen.has(t.id)) { seen.add(t.id); songs.push(t); } });
+  const v = { artists, songs: songs.slice(0, 40), albums, topArtist: top, popular, latest };
   sm.set(key, { t: Date.now(), v });
   return v;
 }
 
-/* ---------- mixes (refresh daily / weekly) ---------- */
-export async function mixSpecs(topIds) {
+/* ---------- mixes: daily mixes, moods and genres (they refresh every day, or on demand) ---------- */
+const pack = l => l.map(t => [t.id, t.title, t.plays || 0, t.duration || 0, t.artist || '', t.artistId || null]);
+const unpack = l => l.map(([id, title, plays, duration, artist, artistId]) => ({ id, title, plays, duration, artist, artistId, album: '', cover: '', mp3: null }));
+const pageSongs = async path => unpack(await cached('pg' + path, DAY, async () => pack(parseSongs(await doc(path)))));
+const wordSongs = async w => unpack(await cached('kw' + w, DAY, async () => pack(parseSongs(await doc('search.php?q=' + encodeURIComponent(w))))));
+
+export const MOODS = [
+  { key: 'romantic', title: 'Romantic Hits', sub: 'Love songs you know by heart', hue: 340, artists: [71, 123, 155, 158, 284, 307, 150, 91, 213, 82, 11, 72], words: ['حبيبي', 'بحبك', 'عشق', 'قلبي', 'غرام', 'حب'] },
+  { key: 'sad', title: 'Sad Songs', sub: 'For the heavy nights', hue: 222, pages: ['singer/1190.html'], artists: [121, 6, 13, 8, 138, 196, 307], words: ['حزين', 'وجع', 'دموع', 'وحشتني', 'ابكي', 'غدار'] },
+  { key: 'heartbreak', title: 'Heartbreak', sub: 'Betrayal, goodbyes and tears', hue: 0, artists: [121, 8, 13, 6, 284, 138, 307], words: ['خيانة', 'هجر', 'غدر', 'نسيتني', 'ظلمتني', 'فراق', 'خسارة'] },
+  { key: 'chill', title: 'Late Night Chill', sub: 'Slow and smooth', hue: 262, artists: [307, 82, 212, 196, 197, 213, 891, 13, 284] },
+  { key: 'party', title: 'Party Mode', sub: 'Turn it up', hue: 28, pages: ['singer/639.html'], artists: [1136, 1052, 247, 969, 1262, 1917, 27, 181, 186, 22, 113] },
+  { key: 'mahraganat', title: 'Mahraganat', sub: 'Street sound of Cairo', hue: 12, pages: ['singer/639.html'], artists: [1136, 1052, 247, 969, 1262, 1917, 1179, 1668, 1278, 1363] },
+  { key: 'rap', title: 'Rap and Hip Hop', sub: 'Arabic rap essentials', hue: 275, artists: [1068, 1132, 1123, 1306, 1310, 452, 27, 1179, 236] },
+  { key: 'queens', title: 'Arab Pop Queens', sub: 'Elissa, Sherine, Angham and more', hue: 312, artists: [6, 121, 13, 152, 8, 146, 118, 282, 140, 341] },
+  { key: 'lebanese', title: 'Lebanese Love', sub: 'Songs from Beirut', hue: 355, artists: [284, 152, 6, 101, 146, 282, 140, 228, 341, 306, 64, 486, 132] },
+  { key: 'khaleeji', title: 'Khaleeji Vibes', sub: 'Voices of the Gulf', hue: 188, artists: [196, 197, 213, 82, 212, 333, 44] },
+  { key: 'egy', title: 'Egyptian Hits', sub: 'The biggest names in Egypt', hue: 18, artists: [71, 72, 123, 155, 11, 22, 186, 181, 150, 158] },
+  { key: 'golden', title: 'Golden Age', sub: 'Timeless classics', hue: 42, artists: [26, 124, 132, 34, 770, 56, 154, 144, 1801, 96, 891] },
+  { key: 'throwback', title: 'Throwback', sub: 'Songs from back then', hue: 24, era: 'old', artists: [123, 154, 158, 150, 90, 68, 106, 146, 71, 127, 12, 13, 155] },
+  { key: 'fresh', title: 'Fresh Hits', sub: 'The newest songs from big artists', hue: 165, era: 'new', artists: [123, 71, 72, 155, 11, 22, 1136, 1052, 247, 969, 121, 6, 13] },
+  { key: 'top', title: 'Most Played Ever', sub: 'The biggest songs on BODO', hue: 140, kind: 'top' },
+  { key: 'rai', title: 'Raï and Algerian', sub: 'Sounds of Algeria', hue: 100, artists: [38, 702, 1657, 1767, 1719] },
+  { key: 'wedding', title: 'Wedding Party', sub: 'Songs for the dance floor', hue: 48, pages: ['album/1023.html'], artists: [181, 186, 22, 113] },
+  { key: 'sebou', title: 'Sebou Songs', sub: 'For newborn celebrations', hue: 172, pages: ['album/1024.html'] },
+  { key: 'bday', title: 'Birthday Songs', sub: 'Happy birthday!', hue: 58, pages: ['album/1051.html'] },
+  { key: 'ramadan', title: 'Ramadan Nights', sub: 'Songs of the holy month', hue: 205, pages: ['album/444.html'] }
+];
+
+export async function mixSpecs(topIds) { // personal mixes, built from what you listen to
   const dir = await directory().catch(() => []);
   if (!dir.length) return [];
   const by = new Map(dir.map(a => [a.id, a])), pop = dir.slice(0, 100), r = rng('dm' + dayKey());
@@ -207,7 +240,7 @@ export async function mixSpecs(topIds) {
   const sub = ids => ids.map(i => by.get(i)?.name).filter(Boolean).slice(0, 3).join(', ') + ' and more';
   const specs = shuffle(seeds, r).slice(0, 3).map((sid, i) => {
     const ids = [sid, ...shuffle(pop.filter(a => a.id !== sid), r).slice(0, 3).map(a => a.id)];
-    return { key: 'dm' + i + dayKey(), title: 'Daily Mix ' + (i + 1), ids, sub: sub(ids), hue: Math.floor(r() * 360) };
+    return { key: 'dm' + i + dayKey(), title: 'Daily Mix ' + (i + 1), ids, lead: true, sub: sub(ids), hue: Math.floor(r() * 360) };
   });
   const dids = shuffle(pop.filter(a => !topIds.includes(a.id)), rng('dw' + weekKey())).slice(0, 6).map(a => a.id);
   specs.push({ key: 'dw' + weekKey(), title: 'Discover Weekly', ids: dids, sub: sub(dids), hue: 280 });
@@ -216,9 +249,23 @@ export async function mixSpecs(topIds) {
 }
 export async function buildMix(spec) {
   if (spec.kind === 'new') return dedupe(await newSongs()).slice(0, 40);
-  const r = rng(spec.key);
-  const lists = await Promise.all(spec.ids.map(id => artistSongs(id).catch(() => [])));
+  const r = rng(spec.key + (spec.seed || dayKey()));
+  const byPlays = l => dedupe(l).sort((a, b) => b.plays - a.plays);
+  const ids = spec.kind === 'top' ? shuffle((await directory().catch(() => [])).slice(0, 24).map(a => a.id), r).slice(0, 12)
+    : spec.lead ? spec.ids : shuffle(spec.ids || spec.artists || [], r).slice(0, 6);
+  const [lists, pages, words] = await Promise.all([
+    Promise.all(ids.map(id => artistSongs(id).catch(() => []))),
+    Promise.all((spec.pages || []).map(p => pageSongs(p).catch(() => []))),
+    Promise.all(shuffle(spec.words || [], r).slice(0, 2).map(w => wordSongs(w).catch(() => [])))
+  ]);
+  if (spec.kind === 'top') return byPlays(lists.flat()).slice(0, 40);
   const out = [];
-  lists.forEach((l, i) => out.push(...shuffle(dedupe(l).sort((a, b) => b.plays - a.plays).slice(0, 40), r).slice(0, i === 0 ? 12 : 6)));
-  return shuffle(dedupe(out), r);
+  lists.forEach((l, i) => {
+    let s = byPlays(l);
+    if (spec.era) { const o = s.slice().sort((a, b) => a.id - b.id), k = Math.max(5, Math.ceil(o.length * (spec.era === 'old' ? .45 : .25))); s = byPlays(spec.era === 'old' ? o.slice(0, k) : o.slice(-k)); }
+    out.push(...shuffle(s.slice(0, 20), r).slice(0, spec.lead && i === 0 ? 12 : 5));
+  });
+  pages.forEach(l => out.push(...shuffle(byPlays(l).slice(0, 50), r).slice(0, 14)));
+  words.forEach(l => out.push(...shuffle(l, r).slice(0, 8)));
+  return shuffle(dedupe(out), r).slice(0, 40);
 }
