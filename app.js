@@ -2,7 +2,7 @@ import * as src from './musicSourceAdapter.js';
 const $ = s => document.querySelector(s), el = $('#view');
 const L = (k, d) => { try { return JSON.parse(localStorage.getItem('am_' + k)) ?? d; } catch { return d; } };
 const S = (k, v) => { try { localStorage.setItem('am_' + k, JSON.stringify(v)); } catch {} };
-const st = { fav: L('fav', []), recent: L('recent', []), pl: L('pl', {}), hist: L('hist', []), queue: [], idx: -1, shuf: false, rep: 0, view: 'home', open: null, q: '', err: '' };
+const st = { fav: L('fav', []), recent: L('recent', []), pl: L('pl', {}), hist: L('hist', []), queue: [], idx: -1, shuf: false, rep: 0, view: 'home', open: null, q: '', err: '', fetching: false };
 const au = new Audio(); au.preload = 'none';
 const lists = {};
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -37,7 +37,8 @@ const greet = () => { const h = new Date().getHours(); return h < 12 ? 'Good mor
 
 const row = (t, c, i) => {
   const a = `data-c="${esc(c)}" data-i="${i}"`, f = isFav(t);
-  return `<div class="row"><img src="${esc(t.cover)}" alt="" loading="lazy"><div class="m" data-act="play" ${a}><b>${esc(t.title)}</b><small>${esc(t.artist)}${t.album ? ' · ' + esc(t.album) : ''}</small></div><button data-act="fav" ${a} class="${f ? 'on' : ''}" aria-label="Favorite">${ic(f ? 'heartF' : 'heart')}</button>${c.startsWith('pl:') ? `<button data-act="rm" ${a} aria-label="Remove from playlist">${ic('x')}</button>` : `<button data-act="add" ${a} aria-label="Add to playlist">${ic('plus')}</button>`}</div>`;
+  const artistSpan = `<span style="text-decoration:underline;cursor:pointer" data-artist="${esc(t.artist)}" data-artistid="${esc(t.artistId || '')}">${esc(t.artist)}</span>`;
+  return `<div class="row"><img src="${esc(t.cover)}" alt="" loading="lazy"><div class="m" data-act="play" ${a}><b>${esc(t.title)}</b><small>${artistSpan}${t.album ? ' · ' + esc(t.album) : ''}</small></div><button data-act="fav" ${a} class="${f ? 'on' : ''}" aria-label="Favorite">${ic(f ? 'heartF' : 'heart')}</button>${c.startsWith('pl:') ? `<button data-act="rm" ${a} aria-label="Remove from playlist">${ic('x')}</button>` : `<button data-act="add" ${a} aria-label="Add to playlist">${ic('plus')}</button>`}</div>`;
 };
 const list = (a, c) => { lists[c] = a; return a.length ? a.map((t, i) => row(t, c, i)).join('') : '<p class="e">Nothing here yet. Tap the heart next to any song to save it.</p>'; };
 const chip = n => `<button class="chip" data-act="q" data-q="${esc(n)}">${esc(n)}</button>`;
@@ -72,6 +73,14 @@ const V = {
     const n = st.open;
     if (n && st.pl[n]) el.innerHTML = `<div class="chips"><button class="chip" data-act="back">${ic('back')}Back</button><button class="chip" data-act="pldel" data-n="${esc(n)}">Delete playlist</button></div><h2 class="g">${esc(n)}</h2>` + list(st.pl[n], 'pl:' + n);
     else el.innerHTML = '<h2 class="g">Playlists</h2><button class="chip" data-act="plnew">' + ic('plus') + 'New playlist</button>' + (Object.keys(st.pl).map(k => `<div class="row" data-act="plopen" data-n="${esc(k)}"><div class="ph">${ic('list')}</div><div class="m"><b>${esc(k)}</b><small>${st.pl[k].length} songs</small></div></div>`).join('') || '<p class="e">Create your first playlist, or tap + next to any song.</p>');
+  },
+  artist(name, id) {
+    el.innerHTML = `<div class="chips"><button class="chip" data-act="backhome">${ic('back')}Back</button></div><h2 class="g">${esc(name)}</h2><div id="artist-res"><p class="ld">Loading…</p></div>`;
+    src.getArtist(id).then(tracks => {
+      if (st.view === 'artist') $('#artist-res').innerHTML = list(tracks, 'artist');
+    }).catch(() => {
+      if (st.view === 'artist') $('#artist-res').innerHTML = '<p class="er">Couldn’t load songs.</p>';
+    });
   }
 };
 const NAV = [['home', 'home', 'Home'], ['search', 'search', 'Search'], ['library', 'library', 'Library'], ['favorites', 'heart', 'Favorites'], ['playlists', 'list', 'Playlists']];
@@ -103,11 +112,63 @@ async function load() {
   try { au.src = src.streamUrl(t); drawP(); await au.play(); } catch (e) { if (e.name !== 'AbortError') st.err = 'Couldn’t play this song. Try another one.'; }
   st.recent = [t, ...st.recent.filter(x => x.id !== t.id)].slice(0, 30); S('recent', st.recent); drawP();
 }
+
+async function autoFetchMore() {
+  if (st.fetching) return;
+  st.fetching = true;
+  const current = st.queue[st.idx];
+  if (!current) { st.fetching = false; return; }
+  
+  st.err = 'Loading more songs…';
+  drawP();
+  
+  try {
+    let more = [];
+    if (current.artistId) {
+      more = await src.getArtist(current.artistId);
+    } else {
+      const res = await src.search(current.artist);
+      more = res.filter(t => t.artist.toLowerCase().includes(current.artist.toLowerCase()));
+    }
+    
+    if (more.length < 3) {
+      const trend = await src.trending();
+      more = more.concat(trend);
+    }
+    
+    const queueIds = new Set(st.queue.map(t => t.id));
+    more = more.filter(t => !queueIds.has(t.id));
+    
+    if (more.length > 0) {
+      more.sort(() => Math.random() - 0.5);
+      const add = more.slice(0, 15);
+      st.queue = st.queue.concat(add);
+      st.idx = st.queue.length - add.length;
+      st.err = '';
+      load();
+    } else {
+      st.err = 'No more songs.';
+      drawP();
+    }
+  } catch (e) {
+    st.err = 'Couldn’t fetch more songs.';
+    drawP();
+  }
+  st.fetching = false;
+}
+
 function next(auto) {
   const n = st.queue.length; if (!n) return;
   if (auto && st.rep === 2) { au.currentTime = 0; au.play(); return; }
   let i = st.shuf ? Math.floor(Math.random() * n) : st.idx + 1;
-  if (i >= n) { if (st.rep || !auto) i = 0; else { au.pause(); return; } }
+  if (i >= n) { 
+    if (st.rep || !auto) {
+      i = 0; 
+    } else {
+      autoFetchMore(); 
+      return; 
+    }
+  }
   st.idx = i; load();
 }
 function prev() { if (!st.queue.length) return; if (au.currentTime > 3) { au.currentTime = 0; return; } st.idx = (st.idx - 1 + st.queue.length) % st.queue.length; load(); }
@@ -128,9 +189,21 @@ function drawP() {
 }
 
 document.addEventListener('click', e => {
+  const artistEl = e.target.closest('[data-artist]');
+  if (artistEl) {
+    e.stopPropagation();
+    st.view = 'artist';
+    document.querySelectorAll('#nav button').forEach(b => b.classList.remove('on'));
+    V.artist(artistEl.dataset.artist, artistEl.dataset.artistid);
+    return;
+  }
+
   const b = e.target.closest('[data-act],[data-go]'); if (!b) return;
   const d = b.dataset, a = d.act; if (d.go && !a) return go(d.go);
   const t = lists[d.c]?.[d.i];
+  
+  if (a === 'backhome') { return go('home'); }
+
   const A = {
     play: () => play(lists[d.c], +d.i),
     fav: () => { st.fav = isFav(t) ? st.fav.filter(x => x.id !== t.id) : [t, ...st.fav]; S('fav', st.fav); b.innerHTML = ic(isFav(t) ? 'heartF' : 'heart'); b.classList.toggle('on', isFav(t)); },
