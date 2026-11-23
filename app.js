@@ -62,9 +62,36 @@ const V = {
     el.innerHTML = `<h2 class="g">${greet()}</h2>` +
       (rc.length ? '<div class="grid">' + rc.map((t, i) => `<div class="gc" data-act="play" data-c="rc" data-i="${i}"><img src="${esc(t.cover)}" alt="" loading="lazy"><b>${esc(t.title)}</b></div>`).join('') + '</div>' : '') +
       (st.fav.length ? '<h2>Your favorites</h2>' + list(st.fav.slice(0, 3), 'hf') : '') +
-      '<h2>Trending artists</h2><div class="chips" id="ar"></div><h2>Trending now</h2><div id="tr"><p class="ld">Loading…</p></div>';
-    src.trending().then(a => { if (st.view !== 'home') return; $('#ar').innerHTML = [...new Set(a.map(t => t.artist))].slice(0, 10).map(chip).join(''); $('#tr').innerHTML = list(a.slice(0, 20), 'tr'); })
-      .catch(() => { if (st.view === 'home') $('#tr').innerHTML = '<p class="er">Couldn’t load songs. Check your connection.</p>'; });
+      '<h2>Popular Radios</h2><div class="h-scroll" id="radios"><p class="ld">Loading…</p></div>' +
+      '<h2>Trending now</h2><div id="tr"><p class="ld">Loading…</p></div>';
+
+    src.trending().then(a => { 
+      if (st.view !== 'home') return; 
+      
+      // تجميع الأغاني في شكل راديو (Mix) زي إسبوتيفاي
+      const byArtist = {};
+      a.forEach(t => {
+        const art = t.artist || 'Unknown';
+        if (!byArtist[art]) byArtist[art] = [];
+        byArtist[art].push(t);
+      });
+
+      const radios = Object.keys(byArtist).slice(0, 10).map(art => {
+        const tracks = byArtist[art];
+        // بناخد أول 20 أغنية كـ Mix
+        lists['radio_' + art] = tracks; 
+        return `<div class="card" data-act="play" data-c="radio_${esc(art)}" data-i="0">
+          <img src="${esc(tracks[0].cover)}" alt="">
+          <b>${esc(art)} Radio</b>
+          <small>${esc(art)}, ${tracks.length > 1 ? esc(tracks[1].artist) : 'Top tracks'}...</small>
+        </div>`;
+      });
+
+      $('#radios').innerHTML = radios.join('') || '<p class="e">No radios available.</p>';
+      $('#tr').innerHTML = list(a.slice(0, 20), 'tr'); 
+    }).catch(() => { 
+      if (st.view === 'home') $('#tr').innerHTML = '<p class="er">Couldn’t load songs. Check your connection.</p>'; 
+    });
   },
   search() { el.innerHTML = `<h2 class="g">Search</h2><input id="q" type="search" dir="auto" placeholder="What do you want to listen to?" value="${esc(st.q)}" enterkeyhint="search" autocomplete="off"><div class="chips" id="ch"></div><div id="res"></div>`; ch(); run(st.q); },
   library() { el.innerHTML = `<h2 class="g">Your library</h2><div class="chips"><button class="chip" data-go="favorites">Favorites (${st.fav.length})</button><button class="chip" data-go="playlists">Playlists (${Object.keys(st.pl).length})</button></div><h2>Recently played</h2>` + list(st.recent, 'rc'); },
