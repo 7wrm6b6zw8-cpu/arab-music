@@ -74,6 +74,47 @@ function preferredArtists() {
 }
 const EGYPTIAN_ARTISTS = ['Amr Diab','Tamer Hosny','Wegz','Sherine','Ahmed Saad','Ruby','Ramy Sabry','Tamer Ashour','Angham','Bahaa Sultan','Marwan Pablo','Afroto','Muslim','Hassan Shakosh','Essam Sasa','Mohamed Hamaki','Hamza Namira','Cairokee','Marwan Moussa','Abyusif','Ahmed Kamel','Donia Samir Ghanem','Hamo Bika','Oka Ortega'];
 const EGYPTIAN_ARTIST_ALIASES = ['عمرو دياب','تامر حسني','ويجز','شيرين','احمد سعد','أحمد سعد','روبي','رامي صبري','تامر عاشور','أنغام','بهاء سلطان','مروان بابلو','أفروتو','مسلم','حسن شاكوش','عصام صاصا','محمد حماقي','حمزة نمرة','كايروكي','مروان موسى','أبيوسف','أحمد كامل','حمو بيكا'];
+
+const ARTIST_ALIASES = {
+  'sherine': ['sherine', 'shereen', 'شيرين', 'شيرين عبد الوهاب'],
+  'amr diab': ['amr diab', 'عمرو دياب'],
+  'tamer hosny': ['tamer hosny', 'تامر حسني'],
+  'angham': ['angham', 'أنغام', 'انغام'],
+  'assala': ['assala', 'أصالة', 'اصالة'],
+  'ramy sabry': ['ramy sabry', 'رامي صبري'],
+  'tamer ashour': ['tamer ashour', 'تامر عاشور'],
+  'wegz': ['wegz', 'ويجز']
+};
+function normArtist(value = '') {
+  return String(value).toLowerCase().normalize('NFKD')
+    .replace(/[\u064B-\u065F\u0670]/g, '')
+    .replace(/[أإآ]/g, 'ا').replace(/ى/g, 'ي')
+    .replace(/[^a-z0-9\u0600-\u06FF]+/g, ' ').trim().replace(/\s+/g, ' ');
+}
+function artistAliases(name) {
+  const key = normArtist(name);
+  const known = Object.entries(ARTIST_ALIASES).find(([k, values]) => normArtist(k) === key || values.some(v => normArtist(v) === key));
+  return known ? known[1].map(normArtist) : [key];
+}
+// Exact primary-artist match: collaborations are deliberately excluded from an artist-only mix.
+function isExactArtistTrack(track, artist) {
+  const actual = normArtist(track?.artist || '');
+  return !!actual && artistAliases(artist).includes(actual);
+}
+const SIMILAR_EGYPTIAN_ARTISTS = {
+  'sherine': ['Angham', 'Assala', 'Ruby', 'Mai Farouk', 'Ramy Sabry', 'Tamer Ashour'],
+  'amr diab': ['Ramy Sabry', 'Tamer Hosny', 'Bahaa Sultan', 'Mohamed Hamaki'],
+  'tamer hosny': ['Amr Diab', 'Ramy Sabry', 'Tamer Ashour', 'Ahmed Saad'],
+  'angham': ['Sherine', 'Assala', 'Ramy Sabry', 'Tamer Ashour'],
+  'tamer ashour': ['Ramy Sabry', 'Sherine', 'Angham', 'Bahaa Sultan'],
+  'wegz': ['Marwan Pablo', 'Afroto', 'Abyusif', 'TUL8TE'],
+  'ramy sabry': ['Tamer Ashour', 'Amr Diab', 'Sherine', 'Bahaa Sultan']
+};
+function similarArtistsFor(name) {
+  const key = Object.keys(SIMILAR_EGYPTIAN_ARTISTS).find(k => artistAliases(name).includes(normArtist(k)));
+  return key ? SIMILAR_EGYPTIAN_ARTISTS[key] : [];
+}
+
 function isEgyptianArtist(name = '') { const value = String(name).toLowerCase(); return EGYPTIAN_ARTISTS.some(x => value.includes(x.toLowerCase())) || EGYPTIAN_ARTIST_ALIASES.some(x => value.includes(x)); }
 async function mapLimit(items, limit, fn) { const out = new Array(items.length); let next = 0; await Promise.all(Array.from({length: Math.min(limit, items.length)}, async () => { while (next < items.length) { const i = next++; try { out[i] = await fn(items[i], i); } catch { out[i] = null; } } })); return out; }
 function trackKey(t) { return `${String(t?.title||'').toLowerCase().trim()}|${String(t?.artist||'').toLowerCase().trim()}`; }
@@ -152,7 +193,7 @@ const V = {
     else el.innerHTML = '<h2 class="g">Playlists</h2><button class="chip" data-act="plnew">' + ic('plus') + 'New playlist</button>' + (Object.keys(st.pl).map(k => `<div class="row" data-act="plopen" data-n="${esc(k)}"><div class="ph">${ic('list')}</div><div class="m"><b>${esc(k)}</b><small>${st.pl[k].length} songs</small></div></div>`).join('') || '<p class="e">Create your first playlist.</p>');
   },
   artist(name, id) {
-    el.innerHTML = `<div class="chips"><button class="chip" data-act="backhome">${ic('back')}Back</button></div><h2 class="g">${esc(name)}</h2><div id="artist-res"><p class="ld">Loading…</p></div>`;
+    el.innerHTML = `<div class="chips"><button class="chip" data-act="backhome">${ic('back')}Back</button><button class="chip" data-act="artistradio" data-artistname="${esc(name)}" data-artistid="${esc(id || '')}">${ic('play')}Start Artist Radio</button></div><h2 class="g">${esc(name)}</h2><div id="artist-res"><p class="ld">Loading…</p></div>`;
     (id ? src.getArtist(id) : Promise.resolve([])).then(tracks => {
       if (st.view === 'artist') $('#artist-res').innerHTML = list(tracks, 'artist');
     }).catch(() => {
@@ -211,37 +252,63 @@ async function autoFetchMore(advanceAfter = false) {
   const oldLength = st.queue.length;
   try {
     const context = st.radio || { kind: 'track', seed: current, artists: [current.artist].filter(Boolean) };
-    const artistNames = [...new Set([...(context.artists || []), current.artist].filter(Boolean))].slice(0, 5);
+    const primary = context.primaryArtist || (context.kind === 'artist' ? context.artists?.[0] : null);
+    const artistNames = [...new Set([...(context.artists || []), current.artist].filter(Boolean))].slice(0, 8);
     const jobs = [];
-    // Egyptian artists and Egypt chart discovery take priority over general discovery.
-    if (context.kind === 'mix' && context.name?.toLowerCase().includes('egypt')) {
+
+    // Artist Radio: exhaust exact solo tracks first, then similar artists.
+    if (primary) {
+      const primaryTracks = st.queue.filter(t => isExactArtistTrack(t, primary));
+      if (primaryTracks.length < 35) {
+        const artistTrack = st.queue.find(t => t.artistId && isExactArtistTrack(t, primary));
+        if (artistTrack?.artistId) jobs.push(src.getArtist(artistTrack.artistId));
+        jobs.push(src.search(primary));
+      }
+      if (primaryTracks.length >= 8 || context.allowSimilar === true) {
+        for (const name of (context.similarArtists || similarArtistsFor(primary)).slice(0, 5)) jobs.push(src.search(name));
+      }
+    } else if (context.kind === 'mix' && context.name?.toLowerCase().includes('egypt')) {
       for (const name of artistNames.length ? artistNames : EGYPTIAN_ARTISTS.slice(0, 8)) jobs.push(src.search(name));
       jobs.push(src.search('MIX:' + EGYPTIAN_ARTISTS.slice(0, 8).join(',')));
+      try { jobs.push(getEgyptTopSongs().then(chart => mapLimit(chart.slice(0, 30), 5, item => resolveChartTrack(item, src.search)))); } catch {}
     } else {
       if (current.artistId) jobs.push(src.getArtist(current.artistId));
       if (artistNames.length) {
         jobs.push(src.search(artistNames[0]));
         jobs.push(src.search('RECOMMEND:' + artistNames.join(',')));
       }
-      // Add Egyptian discovery as a soft preference, not a hard filter.
-      jobs.push(src.search('MIX:' + EGYPTIAN_ARTISTS.slice(0, 6).join(',')));
+      // Egypt is a ranking preference, not a reason to inject unrelated songs into every radio.
+      if (context.kind === 'personal') jobs.push(src.search('MIX:' + EGYPTIAN_ARTISTS.slice(0, 8).join(',')));
     }
+
     const settled = await Promise.allSettled(jobs);
     let candidates = uniqueTracks(settled.flatMap(x => x.status === 'fulfilled' && Array.isArray(x.value) ? x.value : []));
     const queued = new Set(st.queue.map(trackKey));
     let fresh = candidates.filter(t => !queued.has(trackKey(t)));
-    const egyptian = fresh.filter(t => isEgyptianArtist(t.artist));
-    if (context.kind === 'mix' && context.name?.toLowerCase().includes('egypt')) fresh = egyptian.concat(fresh.filter(t => !egyptian.includes(t)));
-    else fresh = egyptian.slice(0, 8).concat(fresh.filter(t => !egyptian.includes(t)));
-    fresh = shuffleArray(uniqueTracks(fresh)).slice(0, 20);
+
+    if (primary) {
+      const solo = fresh.filter(t => isExactArtistTrack(t, primary));
+      const related = fresh.filter(t => !isExactArtistTrack(t, primary));
+      // Keep the artist central; use related artists only as a measured second layer.
+      fresh = solo.length >= 8 ? solo.concat(related.slice(0, 8)) : solo.concat(related);
+    } else {
+      const egyptian = fresh.filter(t => isEgyptianArtist(t.artist));
+      if (context.kind === 'mix' && context.name?.toLowerCase().includes('egypt')) {
+        fresh = egyptian.concat(fresh.filter(t => !egyptian.includes(t)));
+      } else if (context.kind === 'personal') {
+        fresh = egyptian.slice(0, 12).concat(fresh.filter(t => !egyptian.includes(t)));
+      }
+    }
+
+    fresh = (primary ? uniqueTracks(fresh) : shuffleArray(uniqueTracks(fresh))).slice(0, 25);
     if (fresh.length) {
       st.queue.push(...fresh); st.radioSeen.push(...fresh.map(trackKey)); st.err = '';
       if (st.pendingAdvance) { st.idx = oldLength; st.pendingAdvance = false; load(); }
       else drawP();
     } else {
-      st.err = 'Couldn’t find more related songs right now.';
-      if (st.pendingAdvance) { st.pendingAdvance = false; drawP(); }
-      else drawP();
+      st.err = 'No new related tracks were found in the connected music sources.';
+      if (st.pendingAdvance) st.pendingAdvance = false;
+      drawP();
     }
   } catch (error) {
     st.err = 'Couldn’t load more songs. Check your connection.'; drawP();
@@ -254,7 +321,7 @@ function next(auto) {
   if (auto && st.rep === 2) { au.currentTime = 0; au.play().catch(() => {}); return; }
   const nextIndex = st.shuf ? Math.floor(Math.random() * st.queue.length) : st.idx + 1;
   if (nextIndex >= st.queue.length) {
-    if (st.rep === 1 || !auto) { st.idx = 0; load(); }
+    if (st.rep === 1) { st.idx = 0; load(); }
     else autoFetchMore(true);
     return;
   }
@@ -293,6 +360,22 @@ document.addEventListener('click', e => {
   
   if (a === 'backhome') { return go('home'); }
 
+  if (a === 'artistradio') {
+    const artistName = d.artistname || '';
+    const artistId = d.artistid || ''; 
+    const jobs = [src.search(artistName)];
+    if (artistId) jobs.push(src.getArtist(artistId));
+    Promise.allSettled(jobs).then(results => {
+      const all = uniqueTracks(results.flatMap(x => x.status === 'fulfilled' && Array.isArray(x.value) ? x.value : []));
+      const solo = all.filter(t => isExactArtistTrack(t, artistName));
+      const related = all.filter(t => !isExactArtistTrack(t, artistName));
+      const queue = solo.length ? solo.concat(shuffleArray(related)) : all;
+      if (queue.length) { play(queue, 0, { kind: 'artist', primaryArtist: artistName, artists: [artistName], similarArtists: similarArtistsFor(artistName) }); go('home'); }
+      else { const box = $('#artist-res'); if (box) box.innerHTML = '<p class="er">No playable tracks found for this artist.</p>'; }
+    });
+    return;
+  }
+
   // زرار تشغيل التوصيات
   if (a === 'chartplay') {
     const chartTrack = lists[d.list]?.[Number(d.i)]; if (!chartTrack) return;
@@ -325,27 +408,71 @@ document.addEventListener('click', e => {
   if (a === 'mix') {
     const mixName = d.mix;
     const queries = ALL_MIXES[mixName] || [];
-    el.innerHTML = `<div class="chips"><button class="chip" data-act="backhome">${ic('back')}Back</button></div><h2 class="g">${esc(mixName)}</h2><p class="ld">Building a full mix…</p>`;
+    const artistOnly = /\sMix$/i.test(mixName) && queries.length === 1;
+    const primaryArtist = artistOnly ? queries[0] : null;
+    el.innerHTML = `<div class="chips"><button class="chip" data-act="backhome">${ic('back')}Back</button></div><h2 class="g">${esc(mixName)}</h2><p class="ld">Building your radio with exact artist tracks first…</p>`;
+
     const jobs = queries.map(name => src.search(name));
-    if (mixName.toLowerCase().includes('egypt')) jobs.push(getEgyptTopSongs().then(chart => mapLimit(chart.slice(0, 24), 4, item => resolveChartTrack(item, src.search))));
-    Promise.allSettled(jobs).then(results => {
+    if (artistOnly) {
+      const exact = queries[0];
+      jobs.push(src.search(exact));
+    }
+    if (mixName.toLowerCase().includes('egypt')) {
+      jobs.push(getEgyptTopSongs().then(chart => mapLimit(chart.slice(0, 35), 5, item => resolveChartTrack(item, src.search))));
+    }
+
+    Promise.allSettled(jobs).then(async results => {
       let tracks = uniqueTracks(results.flatMap(x => x.status === 'fulfilled' ? (Array.isArray(x.value) ? x.value : []) : []));
-      if (tracks.length < 18) return src.search('MIX:' + queries.join(',')).then(extra => { tracks = uniqueTracks(tracks.concat(extra)); return tracks; });
-      return tracks;
-    }).then(tracks => {
+      if (artistOnly) {
+        let solo = tracks.filter(t => isExactArtistTrack(t, primaryArtist));
+        const artistSeed = solo.find(t => t.artistId);
+        if (artistSeed?.artistId) {
+          try {
+            const pageTracks = await src.getArtist(artistSeed.artistId);
+            solo = uniqueTracks(solo.concat(pageTracks.filter(t => isExactArtistTrack(t, primaryArtist))));
+          } catch {}
+        }
+        const related = tracks.filter(t => !isExactArtistTrack(t, primaryArtist));
+        // A proper artist radio aims for a substantial starting set, without mislabeling collaborations as solo tracks.
+        if (solo.length < 30) {
+          const similar = similarArtistsFor(primaryArtist);
+          const relatedResults = await Promise.allSettled(similar.map(name => src.search(name)));
+          const relatedTracks = uniqueTracks(relatedResults.flatMap(x => x.status === 'fulfilled' ? x.value : []));
+          tracks = solo.concat(related, relatedTracks.filter(t => !isExactArtistTrack(t, primaryArtist)));
+        } else tracks = solo.concat(related);
+        tracks = uniqueTracks(tracks);
+        const soloFinal = tracks.filter(t => isExactArtistTrack(t, primaryArtist));
+        const relatedFinal = tracks.filter(t => !isExactArtistTrack(t, primaryArtist));
+        const ordered = soloFinal.concat(shuffleArray(relatedFinal));
+        if (ordered.length) {
+          play(ordered, 0, { kind: 'artist', name: mixName, primaryArtist, artists: [primaryArtist], similarArtists: similarArtistsFor(primaryArtist) });
+          go('home');
+        } else {
+          el.innerHTML = '<p class="er">No tracks for this artist were found in the connected sources.</p><button class="chip" data-act="backhome">Back</button>';
+        }
+        return;
+      }
+
+      if (tracks.length < 18 && queries.length) {
+        try { tracks = uniqueTracks(tracks.concat(await src.search('MIX:' + queries.join(',')))); } catch {}
+      }
       if (tracks.length) {
         const egyptFirst = mixName.toLowerCase().includes('egypt');
         const egypt = tracks.filter(t => isEgyptianArtist(t.artist));
         const ordered = egyptFirst ? shuffleArray(egypt).concat(shuffleArray(tracks.filter(t => !egypt.includes(t)))) : shuffleArray(tracks);
         play(ordered, 0, { kind: 'mix', name: mixName, artists: queries });
         go('home');
-      } else { el.innerHTML = '<p class="er">No tracks were found for this mix. Try again later.</p><button class="chip" data-act="backhome">Back</button>'; }
-    }).catch(() => { el.innerHTML = '<p class="er">Couldn’t build this mix. Please try again.</p><button class="chip" data-act="backhome">Back</button>'; });
+      } else {
+        el.innerHTML = '<p class="er">No tracks were found for this mix. Try again later.</p><button class="chip" data-act="backhome">Back</button>';
+      }
+    }).catch(() => {
+      el.innerHTML = '<p class="er">Couldn’t build this mix. Please try again.</p><button class="chip" data-act="backhome">Back</button>';
+    });
     return;
   }
 
   const A = {
-    play: () => play(lists[d.c], +d.i),
+    play: () => { const track = lists[d.c]?.[+d.i]; if (!track) return; play([track], 0, { kind: 'track', seed: track, artists: [track.artist].filter(Boolean), primaryArtist: track.artist, similarArtists: similarArtistsFor(track.artist) }); },
     fav: () => { st.fav = isFav(t) ? st.fav.filter(x => x.id !== t.id) : [t, ...st.fav]; S('fav', st.fav); b.innerHTML = ic(isFav(t) ? 'heartF' : 'heart'); b.classList.toggle('on', isFav(t)); },
     add: () => { const k = (prompt('Playlist name') || '').trim(); if (!k) return; st.pl[k] = st.pl[k] || []; if (!st.pl[k].some(x => x.id === t.id)) st.pl[k].push(t); S('pl', st.pl); b.innerHTML = ic('check'); b.classList.add('on'); },
     rm: () => { st.pl[d.c.slice(3)].splice(+d.i, 1); S('pl', st.pl); V.playlists(); },
