@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>مشغّلي أونلاين</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#f1f3f6;--pn:#fff;--tx:#161b22;--mu:#667085;--ac:#0a8f7a;--ln:#dde2e9;color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#12161c;--pn:#1b212a;--tx:#e9edf2;--mu:#98a2b3;--ac:#3fdcc2;--ln:#2a323d;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#12161c;--pn:#1b212a;--tx:#e9edf2;--mu:#98a2b3;--ac:#3fdcc2;--ln:#2a323d;color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--tx);font:400 16px/1.6 "IBM Plex Sans Arabic",system-ui,sans-serif;padding:16px;max-width:520px;margin:0 auto}
+h1{font-size:22px;margin:4px 0 14px;font-weight:600}
+h2{font-size:16px;margin:0 0 10px;font-weight:600}
+section{background:var(--pn);border:1px solid var(--ln);border-radius:14px;padding:14px;margin-bottom:12px}
+button,select{font:inherit;color:var(--tx)}
+.btn{background:var(--ac);color:var(--bg);border:0;border-radius:10px;padding:10px 16px;font-weight:600;width:100%}
+.now{font-size:18px;font-weight:600;min-height:30px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bar{display:flex;align-items:center;gap:8px;color:var(--mu);font-size:13px;direction:ltr}
+.bar input{flex:1}
+.ctl{display:flex;justify-content:center;gap:14px;margin:10px 0 4px;direction:ltr}
+.ctl button{width:54px;height:54px;border-radius:50%;border:1px solid var(--ln);background:var(--bg);font-size:20px}
+.ctl .main{width:66px;height:66px;background:var(--ac);color:var(--bg);border:0}
+input[type=range]{accent-color:var(--ac);width:100%}
+.row{display:grid;grid-template-columns:62px 1fr 36px;gap:8px;align-items:center;font-size:14px}
+.row output{color:var(--mu);direction:ltr;text-align:left}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.chips button{border:1px solid var(--ln);background:var(--bg);border-radius:20px;padding:4px 12px;font-size:14px}
+.chips button.on{border-color:var(--ac);color:var(--ac)}
+ul{list-style:none;margin:10px 0 0;padding:0;max-height:240px;overflow-y:auto}
+li{padding:9px 6px;border-bottom:1px solid var(--ln);font-size:15px}
+li.cur{color:var(--ac);font-weight:600}
+li:last-child{border:0}
+.map{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px;font-size:15px}
+.map select{background:var(--bg);border:1px solid var(--ln);border-radius:8px;padding:6px;max-width:55%}
+.hint{color:var(--mu);font-size:13px;margin:8px 0 0}
+#ytbox{margin-top:10px;aspect-ratio:16/9}
+#ytbox iframe{width:100%;height:100%;border:0;border-radius:10px}
+#q{width:100%;background:var(--bg);color:var(--tx);border:1px solid var(--ln);border-radius:10px;padding:10px;font:inherit}
+#toast{position:fixed;bottom:calc(20px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);background:var(--tx);color:var(--bg);padding:8px 16px;border-radius:20px;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none}
+#toast.show{opacity:1}
+</style>
+</head>
+<body>
+<h1>مشغّلي</h1>
+
+<section>
+  <div class="now" id="title">اختار أغاني من موبايلك</div>
+  <div class="bar"><span id="cur">0:00</span><input type="range" id="seek" min="0" max="100" value="0" step="0.1"><span id="dur">0:00</span></div>
+  <div class="ctl">
+    <button id="prev" aria-label="السابق">⏮</button>
+    <button id="play" class="main" aria-label="تشغيل">▶</button>
+    <button id="next" aria-label="التالي">⏭</button>
+  </div>
+  <div class="row" style="margin-top:10px"><span>الصوت</span><input type="range" id="vol" min="0" max="1.5" step="0.05" value="1"><output id="volo">100</output></div>
+</section>
+
+<section>
+  <button class="btn" id="add">إضافة أغاني</button>
+  <input type="file" id="file" accept="audio/*" multiple hidden>
+  <ul id="list"></ul>
+</section>
+
+<section>
+  <h2>ابحث عن أغاني مجانية</h2>
+  <div style="display:flex;gap:8px"><input type="search" id="q" placeholder="اسم أغنية أو فنان"><button class="btn" id="go" style="width:auto">بحث</button></div>
+  <div class="chips" id="src" style="margin:10px 0 0"></div>
+  <input type="text" id="key" placeholder="مفتاح Jamendo المجاني (client_id)" hidden>
+  <ul id="res"></ul>
+  <div id="ytbox" hidden><div id="ytp"></div></div>
+  <p class="hint">Internet Archive وJamendo موسيقى مرخّصة أو مجانية. YouTube بيشتغل من مشغّل يوتيوب الرسمي، فالمشاهدات والإعلانات بتتحسب، لكن الإكوالايزر وأوامر الضغط مش بتأثر عليه.</p>
+</section>
+
+<section>
+  <h2>الإكوالايزر</h2>
+  <div class="chips" id="presets"></div>
+  <div id="bands"></div>
+</section>
+
+<section>
+  <h2>أوامر ضغط السماعة</h2>
+  <div class="map"><span>ضغطة واحدة</span><select id="m1"></select></div>
+  <div class="map"><span>ضغطتين</span><select id="m2"></select></div>
+  <div class="map"><span>3 ضغطات</span><select id="m3"></select></div>
+  <p class="hint">السماعة بتبعت أوامر التشغيل والتالي والسابق، والتطبيق بيحوّلها للأمر اللي تختاره. بتشتغل مع الأغاني اللي بتشغّلها من هنا بس.</p>
+</section>
+
+<div id="toast"></div>
+
+<script>
+const $=s=>document.querySelector(s);
+const audio=new Audio();audio.crossOrigin='anonymous';audio.preload='auto';audio.setAttribute('playsinline','');
+const FREQS=[60,230,910,3600,14000];
+const PRESETS={'عادي':[0,0,0,0,0],'باص':[7,4,0,-1,1],'صوت واضح':[-2,0,2,4,3],'غناء':[-3,-1,4,3,0],'حدّة':[-1,0,0,4,6]};
+const ACTIONS={toggle:'تشغيل / إيقاف',next:'الأغنية التالية',prev:'الأغنية السابقة',f10:'تقديم 10 ثواني',b10:'رجوع 10 ثواني',volup:'رفع الصوت',voldown:'خفض الصوت',preset:'تغيير الإعداد المسبق',shuffle:'عشوائي'};
+let tracks=[],idx=-1,ctx=null,filters=[],gain=null,shuffle=false;
+let S={eq:[0,0,0,0,0],vol:1,map:{one:'toggle',two:'next',three:'prev'},preset:'عادي'};
+try{const r=localStorage.getItem('player-settings');if(r)S=Object.assign(S,JSON.parse(r))}catch(e){}
+const save=()=>{try{localStorage.setItem('player-settings',JSON.stringify(S))}catch(e){}};
+function toast(t){const e=$('#toast');e.textContent=t;e.classList.add('show');clearTimeout(toast.t);toast.t=setTimeout(()=>e.classList.remove('show'),1400)}
+const fmt=s=>isFinite(s)?Math.floor(s/60)+':'+String(Math.floor(s%60)).padStart(2,'0'):'0:00';
+
+function initAudio(){
+  if(ctx)return;
+  const AC=window.AudioContext||window.webkitAudioContext;
+  ctx=new AC();
+  const src=ctx.createMediaElementSource(audio);
+  let node=src;
+  filters=FREQS.map((f,i)=>{const b=ctx.createBiquadFilter();b.type=i==0?'lowshelf':i==4?'highshelf':'peaking';b.frequency.value=f;b.Q.value=1;b.gain.value=S.eq[i];node.connect(b);node=b;return b});
+  gain=ctx.createGain();gain.gain.value=S.vol;node.connect(gain);gain.connect(ctx.destination);
+}
+function applyEq(){filters.forEach((b,i)=>b.gain.value=S.eq[i])}
+function setVol(v){S.vol=Math.max(0,Math.min(1.5,v));if(gain)gain.gain.value=S.vol;$('#vol').value=S.vol;$('#volo').textContent=Math.round(S.vol*100);save()}
+
+function renderList(){
+  $('#list').innerHTML=tracks.map((t,i)=>`<li data-i="${i}" class="${i==idx?'cur':''}">${esc(t.name)}</li>`).join('');
+}
+function load(i){
+  if(!tracks.length)return;
+  idx=(i+tracks.length)%tracks.length;
+  audio.src=tracks[idx].url;
+  $('#title').textContent=tracks[idx].name;
+  renderList();
+  if('mediaSession' in navigator)navigator.mediaSession.metadata=new MediaMetadata({title:tracks[idx].name,artist:'مشغّلي'});
+}
+function play(){
+  if(idx<0){if(!tracks.length)return toast('ضيف أغاني الأول');load(0)}
+  initAudio();ctx.resume();audio.play().catch(()=>toast('اضغط تشغيل مرة تانية'));
+}
+function next(){if(!tracks.length)return;load(shuffle?Math.floor(Math.random()*tracks.length):idx+1);play()}
+function prev(){if(!tracks.length)return;if(audio.currentTime>3){audio.currentTime=0}else{load(idx-1);play()}}
+
+function cyclePreset(){const k=Object.keys(PRESETS);const n=k[(k.indexOf(S.preset)+1)%k.length];setPreset(n);toast('إعداد: '+n)}
+function setPreset(n){S.preset=n;S.eq=PRESETS[n].slice();applyEq();renderEq();save()}
+const RUN={
+  toggle:()=>audio.paused?play():audio.pause(),
+  next,prev,
+  f10:()=>{audio.currentTime+=10;toast('+10 ث')},
+  b10:()=>{audio.currentTime=Math.max(0,audio.currentTime-10);toast('-10 ث')},
+  volup:()=>{setVol(S.vol+0.1);toast('الصوت '+$('#volo').textContent)},
+  voldown:()=>{setVol(S.vol-0.1);toast('الصوت '+$('#volo').textContent)},
+  preset:cyclePreset,
+  shuffle:()=>{shuffle=!shuffle;toast(shuffle?'عشوائي: شغّال':'عشوائي: مقفول')}
+};
+const run=k=>(RUN[S.map[k]]||RUN.toggle)();
+
+if('mediaSession' in navigator){
+  const h=(a,f)=>{try{navigator.mediaSession.setActionHandler(a,f)}catch(e){}};
+  h('play',()=>run('one'));h('pause',()=>run('one'));
+  h('nexttrack',()=>run('two'));h('previoustrack',()=>run('three'));
+  h('seekforward',RUN.f10);h('seekbackward',RUN.b10);
+}
+audio.addEventListener('play',()=>{$('#play').textContent='⏸';if('mediaSession' in navigator)navigator.mediaSession.playbackState='playing'});
+audio.addEventListener('pause',()=>{$('#play').textContent='▶';if('mediaSession' in navigator)navigator.mediaSession.playbackState='paused'});
+audio.addEventListener('ended',next);
+audio.addEventListener('loadedmetadata',()=>{$('#dur').textContent=fmt(audio.duration)});
+audio.addEventListener('timeupdate',()=>{$('#cur').textContent=fmt(audio.currentTime);if(audio.duration)$('#seek').value=audio.currentTime/audio.duration*100});
+
+$('#seek').oninput=e=>{if(audio.duration)audio.currentTime=e.target.value/100*audio.duration};
+$('#play').onclick=()=>RUN.toggle();
+$('#next').onclick=next;$('#prev').onclick=prev;
+$('#vol').oninput=e=>setVol(+e.target.value);
+$('#add').onclick=()=>$('#file').click();
+$('#file').onchange=e=>{
+  const was=tracks.length;
+  [...e.target.files].forEach(f=>tracks.push({name:f.name.replace(/\.[^.]+$/,''),url:URL.createObjectURL(f)}));
+  if(!was&&tracks.length)load(0);else renderList();
+  e.target.value='';
+};
+$('#list').onclick=e=>{const li=e.target.closest('li');if(li){load(+li.dataset.i);play()}};
+
+function renderEq(){
+  $('#presets').innerHTML=Object.keys(PRESETS).map(n=>`<button data-p="${n}" class="${n==S.preset?'on':''}">${n}</button>`).join('');
+  $('#bands').innerHTML=FREQS.map((f,i)=>`<div class="row"><span>${f>=1000?f/1000+' kHz':f+' Hz'}</span><input type="range" min="-12" max="12" step="1" value="${S.eq[i]}" data-b="${i}"><output>${S.eq[i]}</output></div>`).join('');
+}
+$('#presets').onclick=e=>{const b=e.target.closest('button');if(b)setPreset(b.dataset.p)};
+$('#bands').oninput=e=>{
+  const i=+e.target.dataset.b;S.eq[i]=+e.target.value;e.target.nextElementSibling.textContent=S.eq[i];
+  S.preset='';document.querySelectorAll('#presets button').forEach(b=>b.classList.remove('on'));
+  applyEq();save();
+};
+
+[['m1','one'],['m2','two'],['m3','three']].forEach(([id,k])=>{
+  const s=$('#'+id);
+  s.innerHTML=Object.entries(ACTIONS).map(([v,l])=>`<option value="${v}">${l}</option>`).join('');
+  s.value=S.map[k];
+  s.onchange=()=>{S.map[k]=s.value;save();toast('اتحفظ')};
+});
+
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const dec=s=>{const t=document.createElement('textarea');t.innerHTML=s;return t.value};
+let SRCK='archive',KEYS={jamendo:'',youtube:''},results=[],yt=null;
+try{SRCK=localStorage.getItem('src')||'archive';KEYS=Object.assign(KEYS,JSON.parse(localStorage.getItem('keys')||'{}'))}catch(e){}
+const saveKeys=()=>{try{localStorage.setItem('keys',JSON.stringify(KEYS))}catch(e){}};
+const SRCS=[['archive','Internet Archive'],['jamendo','Jamendo'],['youtube','YouTube']];
+function renderSrc(){
+  $('#src').innerHTML=SRCS.map(([k,n])=>`<button data-k="${k}" class="${k==SRCK?'on':''}">${n}</button>`).join('');
+  $('#key').hidden=SRCK=='archive';$('#key').value=KEYS[SRCK]||'';
+  $('#key').placeholder=SRCK=='youtube'?'مفتاح YouTube Data API':'مفتاح Jamendo المجاني (client_id)';
+  $('#ytbox').hidden=SRCK!='youtube';
+}
+$('#src').onclick=e=>{const b=e.target.closest('button');if(!b)return;SRCK=b.dataset.k;try{localStorage.setItem('src',SRCK)}catch(x){}renderSrc()};
+$('#key').onchange=e=>{KEYS[SRCK]=e.target.value.trim();saveKeys()};
+const msg=t=>{$('#res').innerHTML='<li>'+esc(t)+'</li>'};
+async function search(){
+  const q=$('#q').value.trim();if(!q)return;
+  msg('بدوّر...');
+  try{
+    if(SRCK=='youtube'){
+      if(!KEYS.youtube)return msg('اكتب مفتاح YouTube الأول');
+      const r=await fetch('https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoEmbeddable=true&maxResults=15&q='+encodeURIComponent(q)+'&key='+encodeURIComponent(KEYS.youtube));
+      const j=await r.json();
+      if(j.error)return msg('خطأ من YouTube: '+j.error.message);
+      results=(j.items||[]).map(i=>({name:dec(i.snippet.title)+' - '+dec(i.snippet.channelTitle),yt:i.id.videoId}));
+    }else if(SRCK=='jamendo'){
+      if(!KEYS.jamendo)return msg('اكتب مفتاح Jamendo الأول');
+      const r=await fetch('https://api.jamendo.com/v3.0/tracks/?client_id='+encodeURIComponent(KEYS.jamendo)+'&format=json&limit=20&audioformat=mp32&search='+encodeURIComponent(q));
+      const j=await r.json();
+      if(j.headers&&j.headers.status!='success')return msg('خطأ من Jamendo: '+j.headers.error_message);
+      results=(j.results||[]).map(t=>({name:t.name+' - '+t.artist_name,url:t.audio}));
+    }else{
+      const qq='('+q+') AND mediatype:audio AND licenseurl:*creativecommons*';
+      const r=await fetch('https://archive.org/advancedsearch.php?output=json&rows=20&fl[]=identifier&fl[]=title&fl[]=creator&q='+encodeURIComponent(qq));
+      const j=await r.json();
+      results=j.response.docs.map(d=>({name:(d.title||d.identifier)+(d.creator?' - '+(Array.isArray(d.creator)?d.creator[0]:d.creator):''),id:d.identifier}));
+    }
+  }catch(e){results=[];return msg('مقدرتش أوصل للموقع ('+e.message+')')}
+  $('#res').innerHTML=results.length?results.map((t,i)=>`<li data-r="${i}">${esc(t.name)}</li>`).join(''):'<li>مفيش نتايج</li>';
+}
+function playYt(id,name){
+  audio.pause();$('#title').textContent=name;
+  const go=()=>{if(yt&&yt.loadVideoById){yt.loadVideoById(id)}else{yt=new YT.Player('ytp',{width:'100%',height:'100%',videoId:id,playerVars:{playsinline:1,autoplay:1},events:{onReady:e=>e.target.playVideo()}})}};
+  if(window.YT&&YT.Player)go();
+  else{window.onYouTubeIframeAPIReady=go;if(!document.getElementById('ytapi')){const s=document.createElement('script');s.id='ytapi';s.src='https://www.youtube.com/iframe_api';document.head.appendChild(s)}}
+}
+$('#res').onclick=async e=>{
+  const li=e.target.closest('li');if(!li||li.dataset.r===undefined)return;
+  const t=results[+li.dataset.r];
+  if(t.yt)return playYt(t.yt,t.name);
+  try{
+    let url=t.url;
+    if(!url){
+      toast('بجهّز الأغنية...');
+      const m=await (await fetch('https://archive.org/metadata/'+encodeURIComponent(t.id))).json();
+      const f=(m.files||[]).find(x=>/mp3$/i.test(x.name));
+      if(!f){toast('مفيش ملف صوت');return}
+      url='https://archive.org/download/'+encodeURIComponent(t.id)+'/'+f.name.split('/').map(encodeURIComponent).join('/');
+    }
+    tracks.push({name:t.name,url});load(tracks.length-1);play();
+  }catch(err){toast('الأغنية مش شغالة')}
+};
+$('#go').onclick=search;
+$('#q').onkeydown=e=>{if(e.key=='Enter')search()};
+audio.addEventListener('error',()=>toast('الأغنية مش شغالة'));
+audio.addEventListener('play',()=>{try{yt&&yt.pauseVideo&&yt.pauseVideo()}catch(e){}});
+renderSrc();
+
+setVol(S.vol);renderEq();
+</script>
+</body>
+</html>
