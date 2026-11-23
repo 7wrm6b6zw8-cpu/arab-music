@@ -1,11 +1,13 @@
-// Fill ONLY from official Albumaty documentation or a written agreement. No endpoints are assumed here.
-// searchUrl: q => full URL string. trendingUrl: () => full URL string. Secrets belong in a Cloudflare Worker, never here.
-export const ACCESS = { searchUrl: null, trendingUrl: null, headers: {} };
-async function get(url) {
-  if (!url) throw new Error('Albumaty access method is not configured');
-  const r = await fetch(url, { headers: ACCESS.headers });
-  if (!r.ok) throw new Error('Albumaty ' + r.status);
-  return r.json();
-}
-export const searchRaw = q => get(ACCESS.searchUrl && ACCESS.searchUrl(q));
-export const trendingRaw = () => get(ACCESS.trendingUrl && ACCESS.trendingUrl());
+const PROXY_URL = "https://lingering-butterfly-5d60.7wrm6b6zw8.workers.dev";
+
+export const searchRaw = async (q) => {
+  const res = await fetch(`${PROXY_URL}/search?q=${encodeURIComponent(q)}`);
+  if (!res.ok) throw new Error("Search failed");
+  return await res.json();
+};
+
+export const trendingRaw = async () => {
+  const res = await fetch(`${PROXY_URL}/trending`);
+  if (!res.ok) throw new Error("Trending failed");
+  return await res.json();
+};
