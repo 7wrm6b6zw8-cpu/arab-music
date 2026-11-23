@@ -3,7 +3,7 @@ import { getEgyptTopSongs, getArabRegionSongs, getGlobalTopSongs, resolveChartTr
 const $ = s => document.querySelector(s), el = $('#view');
 const L = (k, d) => { try { return JSON.parse(localStorage.getItem('am_' + k)) ?? d; } catch { return d; } };
 const S = (k, v) => { try { localStorage.setItem('am_' + k, JSON.stringify(v)); } catch {} };
-const st = { fav: L('fav', []), recent: L('recent', []), pl: L('pl', {}), hist: L('hist', []), taste: L('taste', {}), queue: [], idx: -1, shuf: false, rep: 0, view: 'home', open: null, q: '', err: '', fetching: false };
+const st = { fav: L('fav', []), recent: L('recent', []), pl: L('pl', {}), hist: L('hist', []), taste: L('taste', {}), queue: [], idx: -1, shuf: false, rep: 0, view: 'home', open: null, q: '', err: '', fetching: false, radio: null, pendingAdvance: false, prefetchAtIdx: -1, radioSeen: [] };
 const au = new Audio(); au.preload = 'none';
 const lists = {};
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -12,38 +12,27 @@ const isFav = t => st.fav.some(x => x.id === t.id);
 
 // الميكسات الثابتة والاحترافية
 const MIX_SECTIONS = [
-  {
-    title: "Top Hits & Pop",
-    mixes: {
-      "Arabic Top Hits": ["Amr Diab", "Tamer Hosny", "Sherine", "Ramy Sabry", "Angham", "Bahaa Sultan"],
-      "Romantic Mix": ["Tamer Ashour", "Wael Kfoury", "Majid Al Mohandis", "Amr Diab", "Assala"],
-      "Party & Dance": ["Mohamed Ramadan", "Wegz", "Hassan Shakosh", "Tamer Hosny"]
-    }
-  },
-  {
-    title: "Street & Youth",
-    mixes: {
-      "Mahraganat": ["Hamo El Mardashy", "Essam Sasa", "Omar Kamal", "Hassan Shakosh"],
-      "Arabic Rap": ["Wegz", "Marwan Pablo", "Afroto", "Abyusif", "Mousv"],
-      "Modern Egypt": ["Mohamed Ramadan", "Wegz", "Marwan Pablo", "Sherine"]
-    }
-  },
-  {
-    title: "Classics & Tarab",
-    mixes: {
-      "Golden Era": ["Umm Kulthum", "Abdel Halim Hafez", "Fairuz", "Warda"]
-    }
-  },
-  {
-    title: "Top Artists",
-    mixes: {
-      "Amr Diab Mix": ["Amr Diab"],
-      "Tamer Hosny Mix": ["Tamer Hosny"],
-      "Sherine Mix": ["Sherine"],
-      "Wegz Mix": ["Wegz"],
-      "Mohamed Ramadan Mix": ["Mohamed Ramadan"]
-    }
-  }
+  { title: "Egypt First · Trending", mixes: {
+    "Egypt Top Hits": ["Amr Diab", "Tamer Hosny", "Wegz", "Sherine", "Ahmed Saad", "Ruby", "Bahaa Sultan", "Ramy Sabry"],
+    "Egyptian New & Trending": ["Ahmed Saad", "Toul8", "Wegz", "Marwan Pablo", "Ruby", "Muslim", "Tamer Ashour", "Amr Diab"]
+  }},
+  { title: "Mood & Pop", mixes: {
+    "Arabic Top Hits": ["Amr Diab", "Tamer Hosny", "Sherine", "Ramy Sabry", "Angham", "Bahaa Sultan"],
+    "Romantic Mix": ["Tamer Ashour", "Wael Kfoury", "Amr Diab", "Assala", "Sherine", "Angham", "Ramy Sabry"],
+    "Party & Dance": ["Mohamed Ramadan", "Wegz", "Hassan Shakosh", "Tamer Hosny", "Ahmed Saad"]
+  }},
+  { title: "Street & Youth", mixes: {
+    "Mahraganat": ["Hamo El Mardashy", "Essam Sasa", "Omar Kamal", "Hassan Shakosh", "Muslim"],
+    "Arabic Rap": ["Wegz", "Marwan Pablo", "Afroto", "Abyusif", "Mousv"],
+    "Modern Egypt": ["Mohamed Ramadan", "Wegz", "Marwan Pablo", "Sherine", "Ahmed Saad"]
+  }},
+  { title: "Classics & Tarab", mixes: {
+    "Golden Era": ["Umm Kulthum", "Abdel Halim Hafez", "Warda", "Mohamed Abdel Wahab"]
+  }},
+  { title: "Top Egyptian Artists", mixes: {
+    "Amr Diab Mix": ["Amr Diab"], "Tamer Hosny Mix": ["Tamer Hosny"], "Sherine Mix": ["Sherine"],
+    "Wegz Mix": ["Wegz"], "Ahmed Saad Mix": ["Ahmed Saad"]
+  }}
 ];
 
 const ALL_MIXES = {};
@@ -79,10 +68,16 @@ const greet = () => { const h = new Date().getHours(); return h < 12 ? 'Good mor
 const shuffleArray = arr => { const copy = [...arr]; for (let i = copy.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [copy[i], copy[j]] = [copy[j], copy[i]]; } return copy; };
 function preferredArtists() {
   const scores = {};
-  [...st.fav, ...st.recent].forEach(track => { const key = track.artist; if (key) scores[key] = (scores[key] || 0) + (isFav(track) ? 4 : 1); });
-  Object.entries(st.taste).forEach(([artist, data]) => { scores[artist] = (scores[artist] || 0) + Math.max(0, Number(data?.plays) || 0) * 2 - Math.max(0, Number(data?.skips) || 0); });
-  return Object.keys(scores).filter(name => scores[name] > 0).sort((a, b) => scores[b] - scores[a]).slice(0, 3);
+  [...st.fav, ...st.recent].forEach(track => { const key = track.artist; if (key) scores[key] = (scores[key] || 0) + (isFav(track) ? 5 : 1); });
+  Object.entries(st.taste).forEach(([artist, data]) => { scores[artist] = (scores[artist] || 0) + Math.max(0, Number(data?.plays) || 0) * 2 + Math.max(0, Number(data?.completed) || 0) * 2 - Math.max(0, Number(data?.skips) || 0) * 2; });
+  return Object.keys(scores).filter(name => scores[name] > 0).sort((a, b) => scores[b] - scores[a]).slice(0, 5);
 }
+const EGYPTIAN_ARTISTS = ['Amr Diab','Tamer Hosny','Wegz','Sherine','Ahmed Saad','Ruby','Ramy Sabry','Tamer Ashour','Angham','Bahaa Sultan','Marwan Pablo','Afroto','Muslim','Hassan Shakosh','Essam Sasa','Mohamed Hamaki','Hamza Namira','Cairokee','Marwan Moussa','Abyusif','Ahmed Kamel','Donia Samir Ghanem','Hamo Bika','Oka Ortega'];
+const EGYPTIAN_ARTIST_ALIASES = ['عمرو دياب','تامر حسني','ويجز','شيرين','احمد سعد','أحمد سعد','روبي','رامي صبري','تامر عاشور','أنغام','بهاء سلطان','مروان بابلو','أفروتو','مسلم','حسن شاكوش','عصام صاصا','محمد حماقي','حمزة نمرة','كايروكي','مروان موسى','أبيوسف','أحمد كامل','حمو بيكا'];
+function isEgyptianArtist(name = '') { const value = String(name).toLowerCase(); return EGYPTIAN_ARTISTS.some(x => value.includes(x.toLowerCase())) || EGYPTIAN_ARTIST_ALIASES.some(x => value.includes(x)); }
+async function mapLimit(items, limit, fn) { const out = new Array(items.length); let next = 0; await Promise.all(Array.from({length: Math.min(limit, items.length)}, async () => { while (next < items.length) { const i = next++; try { out[i] = await fn(items[i], i); } catch { out[i] = null; } } })); return out; }
+function trackKey(t) { return `${String(t?.title||'').toLowerCase().trim()}|${String(t?.artist||'').toLowerCase().trim()}`; }
+function uniqueTracks(items) { const seen = new Set(); return (items || []).filter(t => t?.title && t?.artist && !seen.has(trackKey(t)) && seen.add(trackKey(t))); }
 function recordTaste(track, event) {
   if (!track?.artist) return;
   const key = track.artist; const item = st.taste[key] || { plays: 0, skips: 0, completed: 0 };
@@ -96,7 +91,8 @@ const row = (t, c, i) => {
 };
 const list = (a, c) => { lists[c] = Array.isArray(a) ? a : []; return lists[c].length ? lists[c].map((t, i) => row(t, c, i)).join('') : '<p class="e">Nothing here yet.</p>'; };
 const chartList = (tracks, key) => {
-  lists[key] = Array.isArray(tracks) ? tracks : [];
+  const sourceTracks = Array.isArray(tracks) ? tracks : [];
+  lists[key] = key === 'chart-eg' ? sourceTracks.slice().sort((a, b) => Number(isEgyptianArtist(b.artist)) - Number(isEgyptianArtist(a.artist)) || (a.chartRank || 999) - (b.chartRank || 999)) : sourceTracks;
   return lists[key].length ? lists[key].slice(0, 20).map((track, index) => `<div class="row chart-row"><span class="chart-rank">${index + 1}</span><img src="${esc(track.cover)}" alt="" loading="lazy"><div class="m"><b>${esc(track.title)}</b><small>${esc(track.artist)} · ${esc(track.album)}</small></div><button data-act="chartplay" data-list="${esc(key)}" data-i="${index}" aria-label="Find and play ${esc(track.title)}">${ic('play')}</button></div>`).join('') : '<p class="e">No chart tracks are available right now.</p>';
 };
 const chip = n => `<button class="chip" data-act="q" data-q="${esc(n)}">${esc(n)}</button>`;
@@ -184,7 +180,15 @@ bindMS();
 au.addEventListener('playing', () => { const t = st.queue[st.idx]; if (t) msMeta(t); bindMS(); });
 
 let loadSequence = 0;
-function play(tracks, index) { if (!Array.isArray(tracks) || !tracks.length || !tracks[index]) return; st.queue = tracks.slice(); st.idx = index; load(); }
+function play(tracks, index, radioContext = null) {
+  if (!Array.isArray(tracks) || !tracks.length || !tracks[index]) return;
+  st.queue = uniqueTracks(tracks);
+  st.idx = Math.max(0, st.queue.findIndex(x => trackKey(x) === trackKey(tracks[index])));
+  st.radio = radioContext || { kind: 'track', seed: st.queue[st.idx], artists: [st.queue[st.idx]?.artist].filter(Boolean) };
+  st.radioSeen = st.queue.map(trackKey);
+  st.fetching = false; st.pendingAdvance = false; st.prefetchAtIdx = -1; st.err = '';
+  load();
+}
 async function load() {
   const track = st.queue[st.idx]; if (!track) return;
   const sequence = ++loadSequence; st.err = ''; msMeta(track);
@@ -192,7 +196,7 @@ async function load() {
     const url = src.streamUrl(track); if (!url) throw new Error('No playable URL');
     au.src = url; drawP(); await au.play();
     if (sequence !== loadSequence) return;
-    st.recent = [track, ...st.recent.filter(item => item.id !== track.id)].slice(0, 30); S('recent', st.recent);
+    st.recent = [track, ...st.recent.filter(item => trackKey(item) !== trackKey(track))].slice(0, 40); S('recent', st.recent);
     recordTaste(track, 'plays'); drawP();
   } catch (error) {
     if (sequence !== loadSequence) return;
@@ -200,37 +204,61 @@ async function load() {
     drawP();
   }
 }
-
-async function autoFetchMore() {
-  if (st.fetching) return; st.fetching = true;
-  const current = st.queue[st.idx];
-  if (!current) { st.fetching = false; return; }
-  st.err = 'Loading more songs…'; drawP();
+async function autoFetchMore(advanceAfter = false) {
+  if (st.fetching) { st.pendingAdvance = st.pendingAdvance || advanceAfter; return; }
+  const current = st.queue[st.idx]; if (!current) return;
+  st.fetching = true; st.pendingAdvance = advanceAfter; st.err = 'Finding more music for you…'; drawP();
+  const oldLength = st.queue.length;
   try {
-    let more = [];
-    if (current.artistId) { more = await src.getArtist(current.artistId); } 
-    else { const res = await src.search(current.artist); more = res.filter(t => t.artist.toLowerCase().includes(current.artist.toLowerCase())); }
-    if (more.length < 3) { const trend = await src.trending(); more = more.concat(trend); }
-    const queueIds = new Set(st.queue.map(t => t.id));
-    more = more.filter(t => !queueIds.has(t.id));
-    if (more.length > 0) {
-      more.sort(() => Math.random() - 0.5);
-      const add = more.slice(0, 15);
-      st.queue = st.queue.concat(add); st.idx = st.queue.length - add.length;
-      st.err = ''; load();
-    } else { st.err = 'No more songs.'; drawP(); }
-  } catch (e) { st.err = 'Couldn’t fetch more songs.'; drawP(); }
-  st.fetching = false;
+    const context = st.radio || { kind: 'track', seed: current, artists: [current.artist].filter(Boolean) };
+    const artistNames = [...new Set([...(context.artists || []), current.artist].filter(Boolean))].slice(0, 5);
+    const jobs = [];
+    // Egyptian artists and Egypt chart discovery take priority over general discovery.
+    if (context.kind === 'mix' && context.name?.toLowerCase().includes('egypt')) {
+      for (const name of artistNames.length ? artistNames : EGYPTIAN_ARTISTS.slice(0, 8)) jobs.push(src.search(name));
+      jobs.push(src.search('MIX:' + EGYPTIAN_ARTISTS.slice(0, 8).join(',')));
+    } else {
+      if (current.artistId) jobs.push(src.getArtist(current.artistId));
+      if (artistNames.length) {
+        jobs.push(src.search(artistNames[0]));
+        jobs.push(src.search('RECOMMEND:' + artistNames.join(',')));
+      }
+      // Add Egyptian discovery as a soft preference, not a hard filter.
+      jobs.push(src.search('MIX:' + EGYPTIAN_ARTISTS.slice(0, 6).join(',')));
+    }
+    const settled = await Promise.allSettled(jobs);
+    let candidates = uniqueTracks(settled.flatMap(x => x.status === 'fulfilled' && Array.isArray(x.value) ? x.value : []));
+    const queued = new Set(st.queue.map(trackKey));
+    let fresh = candidates.filter(t => !queued.has(trackKey(t)));
+    const egyptian = fresh.filter(t => isEgyptianArtist(t.artist));
+    if (context.kind === 'mix' && context.name?.toLowerCase().includes('egypt')) fresh = egyptian.concat(fresh.filter(t => !egyptian.includes(t)));
+    else fresh = egyptian.slice(0, 8).concat(fresh.filter(t => !egyptian.includes(t)));
+    fresh = shuffleArray(uniqueTracks(fresh)).slice(0, 20);
+    if (fresh.length) {
+      st.queue.push(...fresh); st.radioSeen.push(...fresh.map(trackKey)); st.err = '';
+      if (st.pendingAdvance) { st.idx = oldLength; st.pendingAdvance = false; load(); }
+      else drawP();
+    } else {
+      st.err = 'Couldn’t find more related songs right now.';
+      if (st.pendingAdvance) { st.pendingAdvance = false; drawP(); }
+      else drawP();
+    }
+  } catch (error) {
+    st.err = 'Couldn’t load more songs. Check your connection.'; drawP();
+  } finally { st.fetching = false; }
 }
-
 function next(auto) {
-  const n = st.queue.length; if (!n) return;
+  if (!st.queue.length) return;
   const current = st.queue[st.idx];
   if (current && au.currentTime < Math.min(30, (au.duration || 30) * 0.3)) recordTaste(current, 'skips');
-  if (auto && st.rep === 2) { au.currentTime = 0; au.play(); return; }
-  let i = st.shuf ? Math.floor(Math.random() * n) : st.idx + 1;
-  if (i >= n) { if (st.rep || !auto) { i = 0; } else { autoFetchMore(); return; } }
-  st.idx = i; load();
+  if (auto && st.rep === 2) { au.currentTime = 0; au.play().catch(() => {}); return; }
+  const nextIndex = st.shuf ? Math.floor(Math.random() * st.queue.length) : st.idx + 1;
+  if (nextIndex >= st.queue.length) {
+    if (st.rep === 1 || !auto) { st.idx = 0; load(); }
+    else autoFetchMore(true);
+    return;
+  }
+  st.idx = nextIndex; load();
 }
 function prev() { if (!st.queue.length) return; if (au.currentTime > 3) { au.currentTime = 0; return; } st.idx = (st.idx - 1 + st.queue.length) % st.queue.length; load(); }
 au.onended = () => { const current = st.queue[st.idx]; if (current) recordTaste(current, 'completed'); next(true); };
@@ -240,6 +268,8 @@ au.ontimeupdate = () => {
   const p = $('#mpb'); if (p) p.style.width = (au.duration ? au.currentTime / au.duration * 100 : 0) + '%';
   const s = $('#seek'); if (s) { s.max = au.duration || 0; s.value = au.currentTime; $('#ct').textContent = fmt(au.currentTime); $('#dt').textContent = fmt(au.duration); }
   if (ms && isFinite(au.duration) && au.duration > 0) { try { ms.setPositionState({ duration: au.duration, playbackRate: au.playbackRate || 1, position: Math.min(au.currentTime, au.duration) }); } catch {} }
+  // Fetch the next batch before the current queue runs out.
+  if (!st.fetching && st.queue.length - st.idx <= 2 && au.duration > 0 && au.currentTime > 2 && st.prefetchAtIdx !== st.idx) { st.prefetchAtIdx = st.idx; autoFetchMore(false); }
 };
 function drawP() {
   const t = st.queue[st.idx], m = $('#mini'); m.hidden = !t; if (!t) return;
@@ -268,7 +298,7 @@ document.addEventListener('click', e => {
     const chartTrack = lists[d.list]?.[Number(d.i)]; if (!chartTrack) return;
     el.innerHTML = `<div class="chips"><button class="chip" data-act="backhome">${ic('back')}Back</button></div><h2 class="g">${esc(chartTrack.title)}</h2><p class="ld">Finding this exact track in your available music sources…</p>`;
     resolveChartTrack(chartTrack, src.search).then(track => {
-      if (track) { play([track], 0); go('home'); }
+      if (track) { play([track], 0, { kind: 'track', seed: track, artists: [chartTrack.artist, track.artist].filter(Boolean), chartSeed: chartTrack }); go('home'); }
       else el.innerHTML = `<p class="er">This chart track wasn’t found in the connected playback sources. Try searching its title manually.</p><button class="chip" data-act="q" data-q="${esc(chartTrack.title + ' ' + chartTrack.artist)}">Search this track</button><button class="chip" data-act="backhome">Back</button>`;
     }).catch(() => { el.innerHTML = '<p class="er">Couldn’t search the connected playback sources.</p><button class="chip" data-act="backhome">Back</button>'; });
     return;
@@ -276,11 +306,18 @@ document.addEventListener('click', e => {
 
   if (a === 'rec') {
     const topArtists = preferredArtists();
-    el.innerHTML = `<div class="chips"><button class="chip" data-act="backhome">${ic('back')}Back</button></div><h2 class="g">Daily Mix</h2><p class="ld">Building a mix from your listening history…</p>`;
-    if (!topArtists.length) { el.innerHTML = '<p class="e">Listen to and like a few tracks first. Your personal mix will improve as BODO learns your taste.</p><button class="chip" data-act="backhome">Back</button>'; return; }
-    src.search('RECOMMEND:' + topArtists.join(',')).then(tracks => {
-      if (tracks.length) { play(tracks, 0); go('home'); }
-      else { el.innerHTML = '<p class="er">No matching recommendations are available right now.</p><button class="chip" data-act="backhome">Back</button>'; }
+    const seedArtists = [...new Set([...topArtists, ...EGYPTIAN_ARTISTS.slice(0, 4)])].slice(0, 8);
+    el.innerHTML = `<div class="chips"><button class="chip" data-act="backhome">${ic('back')}Back</button></div><h2 class="g">Daily Mix</h2><p class="ld">Building your personal mix with Egyptian music first…</p>`;
+    const jobs = seedArtists.map(name => src.search(name));
+    jobs.push(src.search('RECOMMEND:' + topArtists.join(',')));
+    Promise.allSettled(jobs).then(results => {
+      const tracks = uniqueTracks(results.flatMap(x => x.status === 'fulfilled' ? x.value : []));
+      if (tracks.length) {
+        const egypt = tracks.filter(t => isEgyptianArtist(t.artist));
+        const ordered = shuffleArray(egypt).concat(shuffleArray(tracks.filter(t => !egypt.includes(t))));
+        play(ordered, 0, { kind: 'personal', name: 'Daily Mix', artists: seedArtists });
+        go('home');
+      } else { el.innerHTML = '<p class="er">No matching recommendations are available right now.</p><button class="chip" data-act="backhome">Back</button>'; }
     }).catch(() => { el.innerHTML = '<p class="er">Couldn’t build your mix. Please try again.</p><button class="chip" data-act="backhome">Back</button>'; });
     return;
   }
@@ -288,11 +325,21 @@ document.addEventListener('click', e => {
   if (a === 'mix') {
     const mixName = d.mix;
     const queries = ALL_MIXES[mixName] || [];
-    let workerQuery = "MIX:" + queries.join(',');
-    el.innerHTML = `<div class="chips"><button class="chip" data-act="backhome">${ic('back')}Back</button></div><h2 class="g">${esc(mixName)}</h2><p class="ld">Building your mix...</p>`;
-    src.search(workerQuery).then(tracks => {
-      if (tracks.length) { play(tracks, 0); go('home'); }
-      else { el.innerHTML = '<p class="er">No tracks were found for this mix.</p><button class="chip" data-act="backhome">Back</button>'; }
+    el.innerHTML = `<div class="chips"><button class="chip" data-act="backhome">${ic('back')}Back</button></div><h2 class="g">${esc(mixName)}</h2><p class="ld">Building a full mix…</p>`;
+    const jobs = queries.map(name => src.search(name));
+    if (mixName.toLowerCase().includes('egypt')) jobs.push(getEgyptTopSongs().then(chart => mapLimit(chart.slice(0, 24), 4, item => resolveChartTrack(item, src.search))));
+    Promise.allSettled(jobs).then(results => {
+      let tracks = uniqueTracks(results.flatMap(x => x.status === 'fulfilled' ? (Array.isArray(x.value) ? x.value : []) : []));
+      if (tracks.length < 18) return src.search('MIX:' + queries.join(',')).then(extra => { tracks = uniqueTracks(tracks.concat(extra)); return tracks; });
+      return tracks;
+    }).then(tracks => {
+      if (tracks.length) {
+        const egyptFirst = mixName.toLowerCase().includes('egypt');
+        const egypt = tracks.filter(t => isEgyptianArtist(t.artist));
+        const ordered = egyptFirst ? shuffleArray(egypt).concat(shuffleArray(tracks.filter(t => !egypt.includes(t)))) : shuffleArray(tracks);
+        play(ordered, 0, { kind: 'mix', name: mixName, artists: queries });
+        go('home');
+      } else { el.innerHTML = '<p class="er">No tracks were found for this mix. Try again later.</p><button class="chip" data-act="backhome">Back</button>'; }
     }).catch(() => { el.innerHTML = '<p class="er">Couldn’t build this mix. Please try again.</p><button class="chip" data-act="backhome">Back</button>'; });
     return;
   }

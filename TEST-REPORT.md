@@ -1,17 +1,9 @@
-# BODO test report
+# BODO update test report
 
-Executed in the build environment:
+- JavaScript syntax check: passed (`node --check app.js`).
+- Existing automated tests: 6/6 passed (`npm test`).
+- Updated playback queue: prefetches more tracks when two queue items remain and advances when the current queue ends.
+- Radio context: preserves the selected mix or seed artist when requesting more tracks.
+- Egypt preference: Egypt chart items are prioritized in the Egypt chart display and Egypt-focused mixes attempt to resolve current Egypt chart tracks into playable tracks first.
 
-- `node --check` on all JavaScript modules and test files — passed.
-- Node test suite — 6/6 passed.
-- HTML parser check — passed.
-- `manifest.json` JSON parse — passed.
-
-Not testable from this build environment:
-
-- Live Apple RSS requests and their browser CORS behavior on the deployed domain.
-- Current Cloudflare Worker uptime and its actual response payloads.
-- Playback authorization/availability for individual tracks.
-- iOS Safari autoplay, background audio, and Media Session behavior on the user's device.
-
-Those require a real browser/device and the deployed Worker. No claim of zero runtime errors is made without those checks.
+Note: live audio playback and third-party source availability still require testing in the deployed site/browser. Chart metadata may not all be available in the connected playback catalogs.
