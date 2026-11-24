@@ -1,5 +1,6 @@
 // BODO offline storage: downloaded songs live inside the phone (IndexedDB) and play without internet.
-import { WORKER, resolve } from './bodoApi.js?v=4';
+let cfg = {}; // filled in by app.js: { WORKER, resolve }
+export const config = c => { cfg = c; };
 
 const meta = new Map(); // id -> info about each downloaded song (kept in memory for fast checks)
 let dbp;
@@ -27,8 +28,8 @@ export const persist = () => navigator.storage?.persist?.().catch(() => {});
 export const estimate = () => navigator.storage?.estimate?.().catch(() => null);
 
 export async function save(t, onProgress = () => {}) {
-  await resolve(t); // find the song's real file address
-  const r = await fetch(`${WORKER}/file?u=${encodeURIComponent(t.mp3)}`);
+  await cfg.resolve(t); // find the song's real file address
+  const r = await fetch(`${cfg.WORKER}/file?u=${encodeURIComponent(t.mp3)}`);
   if (!r.ok) throw new Error('HTTP ' + r.status);
   const total = +r.headers.get('Content-Length') || 0, chunks = []; let got = 0;
   if (r.body?.getReader) {
@@ -39,7 +40,7 @@ export async function save(t, onProgress = () => {}) {
   const audio = new Blob(chunks, { type: /audio/.test(ct) ? ct : 'audio/mpeg' });
   if (audio.size < 20000) throw new Error('bad file'); // a tiny reply is an error page, not music
   let cover = null;
-  if (t.cover) { try { const c = await fetch(`${WORKER}/file?u=${encodeURIComponent(t.cover)}`); if (c.ok) cover = await c.blob(); } catch {} }
+  if (t.cover) { try { const c = await fetch(`${cfg.WORKER}/file?u=${encodeURIComponent(t.cover)}`); if (c.ok) cover = await c.blob(); } catch {} }
   const m = { id: t.id, title: t.title, artist: t.artist || '', artistId: t.artistId || null, album: t.album || '', duration: t.duration || 0, size: audio.size + (cover?.size || 0), ts: Date.now(), cover: !!cover };
   await write((ms, fs) => { ms.put(m); fs.put({ id: t.id, audio, cover }); });
   meta.set(t.id, m);

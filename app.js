@@ -1,6 +1,8 @@
 import * as api from './bodoApi.js?v=4';
 import * as off from './offline.js?v=4';
 const $ = s => document.querySelector(s), el = $('#view');
+if (api.BUILD !== 4 || typeof api.resolve !== 'function') { el.innerHTML = '<p class="er">The file bodoApi.js on the site is an old version. Upload the newest bodoApi.js to GitHub, wait a minute, then open the site again.</p>'; throw new Error('old bodoApi.js'); }
+off.config({ WORKER: api.WORKER, resolve: api.resolve });
 const L = (k, d) => { try { return JSON.parse(localStorage.getItem('am_' + k)) ?? d; } catch { return d; } };
 const S = (k, v) => { try { localStorage.setItem('am_' + k, JSON.stringify(v)); } catch {} };
 const st = { fav: L('fav', []), recent: L('recent', []), pl: L('pl', {}), hist: L('hist', []), ap: L('ap', {}), queue: [], idx: -1, shuf: false, rep: 0, view: 'home', arg: null, tab: 'home', stack: [], open: null, q: '', err: '', ext: false, fails: 0, mood: 'all', src: '', sleep: 0, sleepMin: 0 };
