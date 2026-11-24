@@ -1,5 +1,5 @@
-import * as api from './bodoApi.js';
-import * as off from './offline.js';
+import * as api from './bodoApi.js?v=4';
+import * as off from './offline.js?v=4';
 const $ = s => document.querySelector(s), el = $('#view');
 const L = (k, d) => { try { return JSON.parse(localStorage.getItem('am_' + k)) ?? d; } catch { return d; } };
 const S = (k, v) => { try { localStorage.setItem('am_' + k, JSON.stringify(v)); } catch {} };

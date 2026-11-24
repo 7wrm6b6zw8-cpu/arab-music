@@ -1,5 +1,5 @@
 // BODO offline storage: downloaded songs live inside the phone (IndexedDB) and play without internet.
-import { WORKER, resolve } from './bodoApi.js';
+import { WORKER, resolve } from './bodoApi.js?v=4';
 
 const meta = new Map(); // id -> info about each downloaded song (kept in memory for fast checks)
 let dbp;

@@ -13,7 +13,7 @@
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" type="image/png" href="icon-192.png">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Tajawal:wght@400;500;700;800&display=swap">
-<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="styles.css?v=4">
 </head>
 <body>
 <header><div class="brand"><img class="logo" src="icon-192.png" alt=""><h1>BODO</h1></div><button class="hbtn" id="hs" data-go="search" aria-label="Search"></button></header>
@@ -23,6 +23,21 @@
 <div id="full" hidden></div>
 <div id="sheet" hidden></div>
 <nav id="nav"></nav>
-<script type="module" src="app.js"></script>
+<script>
+(function () {
+  var box = function (m) {
+    var d = document.getElementById('boot');
+    if (!d) { d = document.createElement('div'); d.id = 'boot'; d.style.cssText = 'position:fixed;left:12px;right:12px;top:80px;z-index:999;background:#2b0a15;border:1px solid #8E1B3D;color:#fff;padding:12px;border-radius:12px;font:13px/1.4 system-ui;word-break:break-word'; document.body.appendChild(d); }
+    d.textContent = m;
+  };
+  addEventListener('error', function (e) {
+    if (e.target && e.target !== window && e.target.tagName !== 'SCRIPT') return;
+    box('Error: ' + (e.message || 'a file failed to load') + (e.filename ? ' (' + e.filename.split('/').pop() + ':' + e.lineno + ')' : ''));
+  }, true);
+  addEventListener('unhandledrejection', function (e) { box('Error: ' + ((e.reason && e.reason.message) || e.reason)); });
+  setTimeout(function () { var v = document.getElementById('view'); if (v && !v.children.length) box('The app did not start. Close Safari completely and open the site again.'); }, 4000);
+})();
+</script>
+<script type="module" src="app.js?v=4"></script>
 </body>
 </html>
