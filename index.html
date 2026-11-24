@@ -24,6 +24,11 @@
 <div id="sheet" hidden></div>
 <nav id="nav"></nav>
 <script>
+if ('serviceWorker' in navigator) addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });
+addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); window.__bip = e; window.dispatchEvent(new Event('bip')); });
+addEventListener('appinstalled', function () { window.__bip = null; });
+</script>
+<script>
 (function () {
   var box = function (m) {
     var d = document.getElementById('boot');

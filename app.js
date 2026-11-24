@@ -183,8 +183,9 @@ const MOOD_CHIPS = [['all', 'All', ''], ['romantic', 'Romantic', 'heart'], ['sad
 const V = {
   home() {
     const offline = !navigator.onLine, rc = st.recent.slice(0, 6); lists.rc = rc; labels.rc = 'Recently played'; rc.forEach(t => byId.set(t.id, t));
-    const head = `<div class="hello"><small>${greet().toUpperCase()}</small><h2>What are we playing?</h2></div><div class="moods">${MOOD_CHIPS.map(([k, l, i]) => `<button class="mchip${st.mood === k ? ' on' : ''}" data-act="mood" data-k="${k}">${i ? ic(i) : ''}${l}</button>`).join('')}</div>`;
-    const grid = rc.length ? '<div class="grid">' + rc.map((t, i) => `<div class="gc" data-act="play" data-c="rc" data-i="${i}">${art(t)}<b>${esc(t.title)}</b></div>`).join('') + '</div>' : '';
+    const inst = window.__bip && !matchMedia('(display-mode: standalone)').matches ? `<button class="chip gold" data-act="install">${ic('download')}Install BODO on your phone</button>` : '';
+    const head = `<div class="hello"><small>${greet().toUpperCase()}</small><h2>What are we playing?</h2>${inst ? '<div class="inst">' + inst + '</div>' : ''}</div><div class="moods">${MOOD_CHIPS.map(([k, l, i]) => `<button class="mchip${st.mood === k ? ' on' : ''}" data-act="mood" data-k="${k}">${i ? ic(i) : ''}${l}</button>`).join('')}</div>`;
+        const grid = rc.length ? '<div class="grid">' + rc.map((t, i) => `<div class="gc" data-act="play" data-c="rc" data-i="${i}">${art(t)}<b>${esc(t.title)}</b></div>`).join('') + '</div>' : '';
     if (offline) {
       const d = tracksOf(off.all());
       el.innerHTML = head + `<div class="offb">${ic('wifioff')}<span>You’re offline. Your downloaded songs are ready below.</span></div>` + (d.length ? '<h2>Downloaded</h2>' + list(d, 'dv', { label: 'Downloads' }) : '<p class="e">No downloads yet. Download songs while you have internet and they’ll play here without it.</p>') + (grid ? '<h2>Recently played</h2>' + grid : '');
@@ -415,6 +416,7 @@ document.addEventListener('click', e => {
     playall: () => { const l = lists[d.c]; if (l?.length) play(l, 0, labels[d.c]); },
     shufall: () => { const l = lists[d.c]; if (l?.length) play(api.shuffle(l), 0, labels[d.c]); },
     dlall: () => { const l = lists[d.c] || []; if (!l.length) return; if (l.length > 30 && !confirm(`Download ${l.length} songs? This may use about ${Math.round(l.length * 4.5)} MB of storage.`)) return; enqueue(l); },
+    install: async () => { const e = window.__bip; if (!e) return; e.prompt(); try { await e.userChoice; } catch {} window.__bip = null; go('home'); },
     dlstop: () => { dl.stop = true; dl.q.length = 0; },
     rmalldl: () => { if (confirm('Remove all downloaded songs from this phone?')) off.clear().then(() => { toast('All downloads removed'); go('downloads', null, { back: 1 }); }); },
     expand: () => { $('#full').hidden = false; drawP(); },
@@ -441,5 +443,5 @@ document.addEventListener('input', e => {
 document.addEventListener('change', e => { if (e.target.id === 'q' && st.q.length > 1) { st.hist = [st.q, ...st.hist.filter(h => h !== st.q)].slice(0, 15); S('hist', st.hist); } });
 addEventListener('offline', () => { toast('You’re offline. Downloaded songs still play.'); if (st.view === 'home') go('home'); });
 addEventListener('online', () => { toast('Back online'); if (st.view === 'home') go('home'); });
-if ('serviceWorker' in navigator) addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+addEventListener('bip', () => { if (st.view === 'home' && st.mood === 'all') go('home'); });
 off.init().catch(() => {}).finally(() => go('home'));

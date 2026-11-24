@@ -188,3 +188,7 @@ input[type=search]#q::placeholder{color:var(--t2)}
 #toast{position:fixed;left:50%;bottom:calc(168px + var(--sa-b));transform:translate(-50%,16px);background:#fff;color:#121212;padding:10px 16px;border-radius:999px;font-size:14px;font-weight:500;opacity:0;pointer-events:none;transition:.25s;z-index:90;max-width:88vw;text-align:center}
 #toast.show{opacity:1;transform:translate(-50%,0)}
 .m b,.m small,.mt b,.mt small,.gc b,.q,.ftitle h2,.ftitle small,.upn b{unicode-bidi:plaintext;text-align:left}
+
+.chip.gold{border-color:rgba(212,168,90,.5);color:var(--gold);background:rgba(212,168,90,.1)}
+.chip.gold .ic{color:var(--gold)}
+.inst{margin-top:10px}
