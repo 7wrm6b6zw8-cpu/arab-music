@@ -1,13 +1,13 @@
 {
   "name": "BODO",
   "short_name": "BODO",
-  "description": "Arabic music",
+  "description": "Arabic music, online and offline",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#121212",
-  "theme_color": "#121212",
+  "background_color": "#000000",
+  "theme_color": "#000000",
   "lang": "en",
   "dir": "ltr",
   "icons": [

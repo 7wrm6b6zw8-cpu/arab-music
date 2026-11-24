@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#121212">
+<meta name="theme-color" content="#000000">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="BODO">
@@ -12,14 +12,16 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" type="image/png" href="icon-192.png">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800&family=Tajawal:wght@400;500;700;800&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Tajawal:wght@400;500;700;800&display=swap">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<header><svg viewBox="0 0 24 24" class="logo" aria-hidden="true"><rect width="24" height="24" rx="7" fill="#1ED760"/><path d="M6 14v-4M9.5 17V7M13 15V9M16.5 18V6M20 13v-2" transform="translate(-1 0)" stroke="#121212" stroke-width="1.9" stroke-linecap="round" fill="none"/></svg><h1>BODO</h1></header>
+<header><div class="brand"><img class="logo" src="icon-192.png" alt=""><h1>BODO</h1></div><button class="hbtn" id="hs" data-go="search" aria-label="Search"></button></header>
 <main id="view"></main>
+<div id="dlbar" hidden></div>
 <div id="mini" hidden></div>
 <div id="full" hidden></div>
+<div id="sheet" hidden></div>
 <nav id="nav"></nav>
 <script type="module" src="app.js"></script>
 </body>
