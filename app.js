@@ -1,10 +1,11 @@
-import * as api from './bodoApi.js?v=4';
-import * as off from './offline.js?v=4';
+import * as api from './bodoApi.js?v=5';
+import * as off from './offline.js?v=5';
 const $ = s => document.querySelector(s), el = $('#view');
-if (api.BUILD !== 4 || typeof api.resolve !== 'function') { el.innerHTML = '<p class="er">The file bodoApi.js on the site is an old version. Upload the newest bodoApi.js to GitHub, wait a minute, then open the site again.</p>'; throw new Error('old bodoApi.js'); }
+if (api.BUILD !== 5 || typeof api.resolve !== 'function') { el.innerHTML = '<p class="er">The file bodoApi.js on the site is an old version. Upload the newest bodoApi.js to GitHub, wait a minute, then open the site again.</p>'; throw new Error('old bodoApi.js'); }
 off.config({ WORKER: api.WORKER, resolve: api.resolve });
 const L = (k, d) => { try { return JSON.parse(localStorage.getItem('am_' + k)) ?? d; } catch { return d; } };
-const S = (k, v) => { try { localStorage.setItem('am_' + k, JSON.stringify(v)); } catch {} };
+const SKIP = ['mp3', '_r', 'play', '_lc', 'exp']; // temporary links are never saved
+const S = (k, v) => { try { localStorage.setItem('am_' + k, JSON.stringify(v, (key, val) => SKIP.includes(key) ? undefined : val)); } catch {} };
 const st = { fav: L('fav', []), recent: L('recent', []), pl: L('pl', {}), hist: L('hist', []), ap: L('ap', {}), queue: [], idx: -1, shuf: false, rep: 0, view: 'home', arg: null, tab: 'home', stack: [], open: null, q: '', err: '', ext: false, fails: 0, mood: 'all', src: '', sleep: 0, sleepMin: 0 };
 const au = new Audio(); au.preload = 'none';
 const lists = {}, labels = {}, byId = new Map(), mixReg = new Map();
@@ -58,7 +59,7 @@ const ic = n => `<svg viewBox="0 0 24 24" class="ic${FILLED.has(n) ? ' f' : ''}"
 $('#hs').innerHTML = ic('search');
 
 /* ---------- building blocks ---------- */
-const art = t => t.cover ? `<img src="${esc(t.cover)}" alt="" loading="lazy">` : `<div class="ph" style="--p:${pcol(t.title)}" data-lz="${t.id}">${initial(t.title)}</div>`;
+const art = t => t.cover ? `<img src="${esc(t.cover)}" alt="" loading="lazy">` : `<div class="ph" style="--p:${pcol(t.title)}"${t.src === 'mp3pm' ? '' : ` data-lz="${t.id}"`}>${initial(t.title)}</div>`;
 const av = (a, ring) => `<div class="av${ring ? ' ring' : ''}" data-act="artist" data-id="${a.id}">${a.cover ? `<img class="c" src="${esc(a.cover)}" alt="">` : `<div class="ph c" style="--p:${pcol(a.name)}" data-az="${a.id}" data-cls="c">${initial(a.name)}</div>`}<span>${esc(a.name)}</span></div>`;
 const ac = a => `<div class="ac" data-act="album" data-id="${a.id}">${a.cover ? `<img src="${esc(a.cover)}" alt="" loading="lazy">` : `<div class="ph" style="--p:${pcol(a.title)}">${initial(a.title)}</div>`}<b>${esc(a.title)}</b><small>${esc([a.year, a.artist].filter(Boolean).join(' · '))}</small></div>`;
 const mixCard = s => { mixReg.set(s.key, s); const g = grad(s.key); return `<div class="mc" data-act="mixopen" data-k="${esc(s.key)}" style="--c1:${g[0]};--c2:${g[1]}"><b>${esc(s.title)}</b><small>${esc(s.sub || '')}</small></div>`; };
@@ -69,7 +70,7 @@ const row = (t, c, i, o) => {
   const dlm = off.has(t.id) ? `<i class="dlm">${ic('dlok')}</i>` : '';
   return `<div class="row${isCur(t) ? ' cur' : ''}" data-id="${t.id}">${o.num ? `<span class="n">${i + 1}</span>` : ''}${art(t)}<div class="m" data-act="play" ${a}><b>${esc(t.title)}</b><small>${dlm}${who}${t.album ? ' · ' + esc(t.album) : ''}</small></div><span class="eq" aria-hidden="true"><i></i><i></i><i></i></span><button data-act="fav" ${a} class="${f ? 'on' : ''}" aria-label="Favorite">${ic(f ? 'heartF' : 'heart')}</button><button data-act="more" ${a} aria-label="More">${ic('dots')}</button></div>`;
 };
-const list = (a, c, o = {}) => { lists[c] = a; labels[c] = o.label || ''; a.forEach(t => byId.set(t.id, t)); return a.length ? a.map((t, i) => row(t, c, i, o)).join('') : `<p class="e">${o.empty || 'Nothing here yet. Tap the heart next to any song to save it.'}</p>`; };
+const list = (a, c, o = {}) => { lists[c] = a; labels[c] = o.label || ''; a.forEach(t => byId.set(String(t.id), t)); return a.length ? a.map((t, i) => row(t, c, i, o)).join('') : `<p class="e">${o.empty || 'Nothing here yet. Tap the heart next to any song to save it.'}</p>`; };
 const chip = n => `<button class="chip" data-act="q" data-q="${esc(n)}">${esc(n)}</button>`;
 const backBar = () => `<button class="chip" data-act="goback">${ic('back')}Back</button>`;
 const acts = (c, extra = '') => `<div class="acts"><button class="big" data-act="playall" data-c="${esc(c)}" aria-label="Play all">${ic('play')}</button><button class="chip" data-act="shufall" data-c="${esc(c)}">${ic('shuf')}Shuffle</button><button class="chip" data-act="dlall" data-c="${esc(c)}">${ic('download')}Download</button>${extra}</div>`;
@@ -79,7 +80,7 @@ const tracksOf = metas => metas.map(m => ({ id: m.id, title: m.title, artist: m.
 const io = new IntersectionObserver(es => es.forEach(e => {
   if (!e.isIntersecting) return; const n = e.target; io.unobserve(n);
   const swap = u => { if (!u || !n.isConnected) return; const im = new Image(); im.src = u; im.alt = ''; im.className = n.dataset.cls || ''; n.replaceWith(im); };
-  if (n.dataset.lz) { const t = byId.get(+n.dataset.lz); if (t && navigator.onLine) api.resolve(t).then(() => swap(t.cover)).catch(() => {}); }
+  if (n.dataset.lz) { const t = byId.get(n.dataset.lz); if (t && navigator.onLine) api.resolve(t).then(() => swap(t.cover)).catch(() => {}); }
   else if (n.dataset.az && navigator.onLine) api.artist(+n.dataset.az).then(a => swap(a.cover)).catch(() => {});
 }), { rootMargin: '250px' });
 const lazy = () => document.querySelectorAll('.ph[data-lz],.ph[data-az]').forEach(n => { if (!n.__o) { n.__o = 1; io.observe(n); } });
@@ -171,8 +172,9 @@ async function run(q) {
       + (x.latest.length ? '<h2>Latest releases</h2>' + list(x.latest, 'sl', { label: top.name }) : '')
       + (x.artists.length > 1 || (x.artists.length && !top) ? '<h2>Artists</h2><div class="hs">' + x.artists.map(a => av(a)).join('') + '</div>' : '')
       + (x.songs.length ? '<h2>' + (top ? 'More songs' : 'Songs') + '</h2>' + list(x.songs, 's', { label: 'Search results' }) : '')
+      + (x.foreign.length ? '<h2>International</h2>' + list(x.foreign, 'sf', { label: 'International' }) : '')
       + (x.albums.length ? '<h2>Albums</h2><div class="hs">' + x.albums.map(ac).join('') + '</div>' : '')
-      + (top || x.artists.length || x.songs.length ? '' : `<p class="e">No results for “${esc(q)}”. Try different words.</p>`);
+      + (top || x.artists.length || x.songs.length || x.foreign.length ? '' : `<p class="e">No results for “${esc(q)}”. Try different words.</p>`);
   } catch { if (n === tok && $('#res')) $('#res').innerHTML = '<p class="er">Couldn’t reach the music source. Check your connection and try again.</p>'; }
 }
 const ch = () => { const c = $('#ch'); if (c) c.innerHTML = st.hist.filter(h => h.includes($('#q').value)).slice(0, 8).map(chip).join(''); };
@@ -182,7 +184,7 @@ const topIds = () => [...new Set([...Object.entries(st.ap).sort((a, b) => b[1] -
 const MOOD_CHIPS = [['all', 'All', ''], ['romantic', 'Romantic', 'heart'], ['sad', 'Sad', 'rain'], ['party', 'Party', 'flame'], ['chill', 'Chill', 'moon'], ['golden', 'Classics', 'disc']];
 const V = {
   home() {
-    const offline = !navigator.onLine, rc = st.recent.slice(0, 6); lists.rc = rc; labels.rc = 'Recently played'; rc.forEach(t => byId.set(t.id, t));
+    const offline = !navigator.onLine, rc = st.recent.slice(0, 6); lists.rc = rc; labels.rc = 'Recently played'; rc.forEach(t => byId.set(String(t.id), t));
     const inst = window.__bip && !matchMedia('(display-mode: standalone)').matches ? `<button class="chip gold" data-act="install">${ic('download')}Install BODO on your phone</button>` : '';
     const head = `<div class="hello"><small>${greet().toUpperCase()}</small><h2>What are we playing?</h2>${inst ? '<div class="inst">' + inst + '</div>' : ''}</div><div class="moods">${MOOD_CHIPS.map(([k, l, i]) => `<button class="mchip${st.mood === k ? ' on' : ''}" data-act="mood" data-k="${k}">${i ? ic(i) : ''}${l}</button>`).join('')}</div>`;
         const grid = rc.length ? '<div class="grid">' + rc.map((t, i) => `<div class="gc" data-act="play" data-c="rc" data-i="${i}">${art(t)}<b>${esc(t.title)}</b></div>`).join('') + '</div>' : '';
@@ -298,8 +300,8 @@ async function load() {
     let src = '';
     if (off.has(t.id)) { const u = await off.url(t.id); if (u) { src = u.audio; t._lc = u.cover; } }
     if (!src) {
-      if (!(t.mp3 && t._r)) { if (!navigator.onLine) throw new Error('offline'); await api.resolve(t); }
-      src = t.mp3;
+      if (!api.ready(t)) { if (!navigator.onLine) throw new Error('offline'); await api.resolve(t); }
+      src = t.play || t.mp3;
     }
     if (my !== lt) return;
     msMeta(t, t._lc); au.src = src; drawP(); await au.play(); st.fails = 0;
@@ -310,10 +312,10 @@ async function load() {
     return;
   }
   if (my !== lt) return;
-  st.recent = [t, ...st.recent.filter(x => x.id !== t.id)].slice(0, 30); S('recent', st.recent.map(({ _lc, ...r }) => r));
+  st.recent = [t, ...st.recent.filter(x => x.id !== t.id)].slice(0, 30); S('recent', st.recent);
   if (t.artistId) { st.ap[t.artistId] = (st.ap[t.artistId] || 0) + 1; S('ap', st.ap); }
   drawP();
-  const nx = st.queue[st.idx + 1]; if (nx && !nx._r && navigator.onLine && !off.has(nx.id)) api.resolve(nx).catch(() => {}); // get the next song ready
+  const nx = st.queue[st.idx + 1]; if (nx && !api.ready(nx) && navigator.onLine && !off.has(nx.id)) api.resolve(nx).catch(() => {}); // get the next song ready
   if (st.queue.length - st.idx <= 3) extend();
 }
 

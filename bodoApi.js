@@ -1,6 +1,6 @@
 // BODO data layer: talks to the Cloudflare Worker (/page proxy), parses Albumaty pages in the browser.
 export const WORKER = 'https://lingering-butterfly-5d60.7wrm6b6zw8.workers.dev';
-export const BUILD = 4; // app.js checks this to be sure it is paired with the right version of this file
+export const BUILD = 5; // app.js checks this to be sure it is paired with the right version of this file
 const BASE = 'https://www.albumaty.com', DAY = 864e5, MIN = 6e4;
 
 /* ---------- cache ---------- */
@@ -65,6 +65,39 @@ function parseAlbums(d, ctx = {}) {
     out.push({ id, title: (m ? m[1] : t).split(' ألبوم ')[0].trim(), year: m ? m[2] : '', artist: (m && m[3]) || ctx.artist || '', cover: goodCover(img?.getAttribute('data-src') || img?.getAttribute('src') || '') });
   }
   return out;
+}
+
+
+/* ---------- international songs (MP3.pm), reached through the Worker's /ext ---------- */
+const extDoc = async u => {
+  const r = await fetch(`${WORKER}/ext?u=${encodeURIComponent(u)}`);
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return new DOMParser().parseFromString(await r.text(), 'text/html');
+};
+const slug = s => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+function parseExt(d) {
+  const out = [], seen = new Set();
+  for (const li of d.querySelectorAll('li')) {
+    let song = null, who = null;
+    for (const a of li.querySelectorAll('a[href]')) {
+      let u; try { u = new URL(a.getAttribute('href'), 'https://mp3.pm/'); } catch { continue; }
+      if (!/(^|\.)mp3\.pm$/.test(u.hostname)) continue;
+      if (/^\/song\/\d+-/.test(u.pathname)) { if (txt(a) && !song) song = [a, u]; } // the title link has text, the download icon has none
+      else if (u.pathname === '/' && /^\d+-/.test(u.hostname) && !who) who = a;
+    }
+    if (!song) continue;
+    const id = 'm' + song[1].pathname.match(/^\/song\/(\d+)-/)[1];
+    if (seen.has(id)) continue; seen.add(id);
+    const dm = txt(li).match(/(\d{1,2}):(\d{2})(?::(\d{2}))?\s*$/);
+    out.push({ id, title: txt(song[0]), artist: who ? txt(who) : '', artistId: null, album: '', cover: '', duration: dm && !dm[3] ? +dm[1] * 60 + +dm[2] : 0, plays: 0, mp3: null, src: 'mp3pm', page: `https://${song[1].hostname}${song[1].pathname}` });
+  }
+  return out.filter(t => t.title);
+}
+export async function foreignSearch(q) {
+  const raw = q.trim();
+  if (!/[a-z]/i.test(raw) || /[\u0600-\u06FF]/.test(raw)) return []; // MP3.pm is for English-spelled searches
+  const k = slug(raw); if (k.length < 2) return [];
+  return cached('fs' + k, 30 * MIN, async () => parseExt(await extDoc(`https://s-${k}.mp3.pm/`)).slice(0, 30));
 }
 
 /* ---------- text matching (Arabic spelling + English/Franco) ---------- */
@@ -157,8 +190,18 @@ export const home = () => cached('home', 30 * MIN, async () => { const d = await
 export const newSongs = () => cached('new', 30 * MIN, async () => parseSongs(await doc('nowlastsongsnow.html')));
 export const newAlbums = () => cached('albums', 60 * MIN, async () => parseAlbums(await doc('lastalbums.html')));
 
+export const ready = t => !!(t.mp3 && t._r && (!t.exp || Date.now() < t.exp)); // MP3.pm links expire, so they get a timer
 export async function resolve(t) { // fetch the real mp3 + cover when a song is about to be played
-  if (t.mp3 && t._r) return t;
+  if (ready(t)) return t;
+  if (t.src === 'mp3pm') {
+    const r = await cached('s' + t.id, 20 * MIN, async () => {
+      const mp3 = meta(await extDoc(t.page), 'og:audio');
+      if (!mp3) throw new Error('no audio');
+      return { mp3 };
+    });
+    t.mp3 = r.mp3; t.play = `${WORKER}/file?u=${encodeURIComponent(r.mp3)}`; t._r = 1; t.exp = Date.now() + 20 * MIN;
+    return t;
+  }
   const r = await cached('s' + t.id, 7 * DAY, async () => {
     const d = await doc(`song/${t.id}.html`), h1 = d.querySelector('h1');
     const mp3 = meta(d, 'og:audio') || d.querySelector('audio[src]')?.getAttribute('src') || d.querySelector('source[src]')?.getAttribute('src') || '';
@@ -177,9 +220,10 @@ export async function resolve(t) { // fetch the real mp3 + cover when a song is 
 const sm = new Map();
 export async function search(q) {
   const raw = q.trim(), key = norm(raw);
-  if (raw.length < 2) return { artists: [], songs: [], albums: [], topArtist: null };
+  if (raw.length < 2) return { artists: [], songs: [], albums: [], topArtist: null, popular: [], latest: [], foreign: [] };
   const hit = sm.get(key); if (hit && Date.now() - hit.t < 10 * MIN) return hit.v;
   const n = key, toks = n.split(' ').filter(Boolean), qs = skel(raw);
+  const foreignP = foreignSearch(raw).catch(() => []);
   const [dir, ...lists] = await Promise.all([directory().catch(() => []), ...variants(raw).map(v => doc('search.php?q=' + encodeURIComponent(v)).then(d => parseSongs(d)).catch(() => []))]);
   const artists = dir.map(a => ({ ...a, s: scoreArtist(a, n, toks, qs) })).filter(a => a.s > 0).sort((a, b) => b.s - a.s).slice(0, 10);
   let found = lists.flat();
@@ -200,7 +244,7 @@ export async function search(q) {
   }
   const seen = new Set([...popular, ...latest].map(t => t.id)), songs = [];
   found.forEach(t => { if (!seen.has(t.id)) { seen.add(t.id); songs.push(t); } });
-  const v = { artists, songs: songs.slice(0, 40), albums, topArtist: top, popular, latest };
+  const v = { artists, songs: songs.slice(0, 40), albums, topArtist: top, popular, latest, foreign: await foreignP };
   sm.set(key, { t: Date.now(), v });
   return v;
 }
@@ -227,6 +271,7 @@ export const MOODS = [
   { key: 'throwback', title: 'Throwback', sub: 'Songs from back then', hue: 24, era: 'old', artists: [123, 154, 158, 150, 90, 68, 106, 146, 71, 127, 12, 13, 155] },
   { key: 'fresh', title: 'Fresh Hits', sub: 'The newest songs from big artists', hue: 165, era: 'new', artists: [123, 71, 72, 155, 11, 22, 1136, 1052, 247, 969, 121, 6, 13] },
   { key: 'top', title: 'Most Played Ever', sub: 'The biggest songs on BODO', hue: 140, kind: 'top' },
+  { key: 'intl', title: 'International Hits', sub: 'Pop, rap and dance from around the world', hue: 200, kind: 'intl' },
   { key: 'rai', title: 'Raï and Algerian', sub: 'Sounds of Algeria', hue: 100, artists: [38, 702, 1657, 1767, 1719] },
   { key: 'wedding', title: 'Wedding Party', sub: 'Songs for the dance floor', hue: 48, pages: ['album/1023.html'], artists: [181, 186, 22, 113] },
   { key: 'sebou', title: 'Sebou Songs', sub: 'For newborn celebrations', hue: 172, pages: ['album/1024.html'] },
@@ -251,6 +296,11 @@ export async function mixSpecs(topIds) { // personal mixes, built from what you 
   return specs;
 }
 export async function buildMix(spec) {
+  if (spec.kind === 'intl') {
+    const r = rng(spec.key + (spec.seed || dayKey()));
+    const lists = await Promise.all(['https://mp3.pm/', 'https://mp3.pm/top/rap/', 'https://mp3.pm/top/dance_house/'].map(p => cached('ft' + p, 6 * 60 * MIN, async () => parseExt(await extDoc(p))).catch(() => [])));
+    return shuffle(dedupe(lists.flat()), r).slice(0, 40);
+  }
   if (spec.kind === 'new') return dedupe(await newSongs()).slice(0, 40);
   const r = rng(spec.key + (spec.seed || dayKey()));
   const byPlays = l => dedupe(l).sort((a, b) => b.plays - a.plays);
