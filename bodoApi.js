@@ -1,6 +1,6 @@
 // BODO data layer: talks to the Cloudflare Worker (/page proxy), parses Albumaty pages in the browser.
 export const WORKER = 'https://lingering-butterfly-5d60.7wrm6b6zw8.workers.dev';
-export const BUILD = 5; // app.js checks this to be sure it is paired with the right version of this file
+export const BUILD = 6; // app.js checks this to be sure it is paired with the right version of this file
 const BASE = 'https://www.albumaty.com', DAY = 864e5, MIN = 6e4;
 
 /* ---------- cache ---------- */
@@ -78,12 +78,19 @@ const slug = s => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^
 function parseExt(d) {
   const out = [], seen = new Set();
   for (const li of d.querySelectorAll('li')) {
-    let song = null, who = null;
+    let song = null, any = null, who = null;
     for (const a of li.querySelectorAll('a[href]')) {
       let u; try { u = new URL(a.getAttribute('href'), 'https://mp3.pm/'); } catch { continue; }
       if (!/(^|\.)mp3\.pm$/.test(u.hostname)) continue;
-      if (/^\/song\/\d+-/.test(u.pathname)) { if (txt(a) && !song) song = [a, u]; } // the title link has text, the download icon has none
-      else if (u.pathname === '/' && /^\d+-/.test(u.hostname) && !who) who = a;
+      if (/^\/song\/\d+-/.test(u.pathname)) {
+        const t = txt(a);
+        any = any || [a, u];
+        if (t && !/^\(?download\)?$/i.test(t) && !song) song = [a, u]; // skip the "(download)" button, keep the real title link
+      } else if (u.pathname === '/' && /^\d+-/.test(u.hostname) && !who) who = a;
+    }
+    if (!song && any) { // no title link found: build a title from the address
+      const w = any[1].pathname.replace(/^\/song\/\d+-/, '').replace(/\/$/, '').replace(/-/g, ' ');
+      song = [{ textContent: w.replace(/\b\w/g, c => c.toUpperCase()) }, any[1]];
     }
     if (!song) continue;
     const id = 'm' + song[1].pathname.match(/^\/song\/(\d+)-/)[1];
@@ -97,7 +104,7 @@ export async function foreignSearch(q) {
   const raw = q.trim();
   if (!/[a-z]/i.test(raw) || /[\u0600-\u06FF]/.test(raw)) return []; // MP3.pm is for English-spelled searches
   const k = slug(raw); if (k.length < 2) return [];
-  return cached('fs' + k, 30 * MIN, async () => parseExt(await extDoc(`https://s-${k}.mp3.pm/`)).slice(0, 30));
+  return cached('fs2' + k, 30 * MIN, async () => parseExt(await extDoc(`https://s-${k}.mp3.pm/`)).slice(0, 30));
 }
 
 /* ---------- text matching (Arabic spelling + English/Franco) ---------- */
@@ -298,7 +305,7 @@ export async function mixSpecs(topIds) { // personal mixes, built from what you 
 export async function buildMix(spec) {
   if (spec.kind === 'intl') {
     const r = rng(spec.key + (spec.seed || dayKey()));
-    const lists = await Promise.all(['https://mp3.pm/', 'https://mp3.pm/top/rap/', 'https://mp3.pm/top/dance_house/'].map(p => cached('ft' + p, 6 * 60 * MIN, async () => parseExt(await extDoc(p))).catch(() => [])));
+    const lists = await Promise.all(['https://mp3.pm/', 'https://mp3.pm/top/rap/', 'https://mp3.pm/top/dance_house/'].map(p => cached('ft2' + p, 6 * 60 * MIN, async () => parseExt(await extDoc(p))).catch(() => [])));
     return shuffle(dedupe(lists.flat()), r).slice(0, 40);
   }
   if (spec.kind === 'new') return dedupe(await newSongs()).slice(0, 40);

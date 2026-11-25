@@ -1,7 +1,7 @@
-import * as api from './bodoApi.js?v=5';
-import * as off from './offline.js?v=5';
+import * as api from './bodoApi.js?v=6';
+import * as off from './offline.js?v=6';
 const $ = s => document.querySelector(s), el = $('#view');
-if (api.BUILD !== 5 || typeof api.resolve !== 'function') { el.innerHTML = '<p class="er">The file bodoApi.js on the site is an old version. Upload the newest bodoApi.js to GitHub, wait a minute, then open the site again.</p>'; throw new Error('old bodoApi.js'); }
+if (api.BUILD !== 6 || typeof api.resolve !== 'function') { el.innerHTML = '<p class="er">The file bodoApi.js on the site is an old version. Upload the newest bodoApi.js to GitHub, wait a minute, then open the site again.</p>'; throw new Error('old bodoApi.js'); }
 off.config({ WORKER: api.WORKER, resolve: api.resolve });
 const L = (k, d) => { try { return JSON.parse(localStorage.getItem('am_' + k)) ?? d; } catch { return d; } };
 const SKIP = ['mp3', '_r', 'play', '_lc', 'exp']; // temporary links are never saved

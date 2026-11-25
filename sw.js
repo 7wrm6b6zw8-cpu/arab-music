@@ -1,6 +1,6 @@
 // BODO service worker: keeps the app itself on the phone so it opens without internet.
-const V = 'bodo-v5';
-const SHELL = ['./', 'index.html', 'app.js?v=5', 'bodoApi.js?v=5', 'offline.js?v=5', 'styles.css?v=5', 'manifest.json', 'icon-180.png', 'icon-192.png', 'icon-512.png'];
+const V = 'bodo-v6';
+const SHELL = ['./', 'index.html', 'app.js?v=6', 'bodoApi.js?v=6', 'offline.js?v=6', 'styles.css?v=6', 'manifest.json', 'icon-180.png', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', e => { e.waitUntil(caches.open(V).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', e => {
