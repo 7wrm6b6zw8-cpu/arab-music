@@ -1,9 +1,9 @@
 import * as albumaty from './albumaty.js';
 import { similarArtistsRaw } from './albumatySearch.js';
 
-// Albumaty is the only enabled search, discovery and playback source in BODO.
+// تعديل: تقبل أغاني ألبوماتي وأغاني mp3.pm
 const valid = tracks => (Array.isArray(tracks) ? tracks : []).filter(track =>
-  track && track.title && track.audioUrl && track.source === 'albumaty'
+  track && track.title && track.audioUrl && (track.source === 'albumaty' || track.source === 'mp3pm')
 );
 
 export const search = async query => {
@@ -22,7 +22,13 @@ export const getArtist = async id => {
   try { return valid(await albumaty.getArtist(id)); } catch { return []; }
 };
 
-export const streamUrl = track => track?.source === 'albumaty' ? albumaty.streamUrl(track) : null;
+// تعديل: عشان يعرف يشغل الأغاني من mp3.pm
+export const streamUrl = track => {
+  if (!track) return null;
+  if (track.source === 'albumaty') return albumaty.streamUrl(track);
+  if (track.source === 'mp3pm') return track.audioUrl;
+  return track.audioUrl || null;
+};
 
 export const similarArtists = async artist => {
   const name = String(artist || '').trim();
