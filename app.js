@@ -168,13 +168,14 @@ async function run(q) {
     const x = await api.search(q); if (n !== tok || !$('#res')) return;
     const top = x.topArtist;
     r.innerHTML = (top ? `<div class="trc" data-act="artist" data-id="${top.id}">${top.cover ? `<img class="c" src="${esc(top.cover)}" alt="">` : `<div class="ph c" style="--p:${pcol(top.name)}">${initial(top.name)}</div>`}<div><b>${esc(top.name)}</b><small>Artist · ${top.count} songs · all songs and albums</small></div>${ic('fwd')}</div>` : '')
+      + (x.best ? '<h2>Best match</h2>' + list([x.best], 'sb', { label: 'Best match' }) : '')
       + (x.popular.length ? '<h2>Popular songs</h2>' + list(x.popular, 'sp', { label: top.name }) + `<button class="chip" data-act="artist" data-id="${top.id}">See all ${top.count} songs</button>` : '')
       + (x.latest.length ? '<h2>Latest releases</h2>' + list(x.latest, 'sl', { label: top.name }) : '')
       + (x.artists.length > 1 || (x.artists.length && !top) ? '<h2>Artists</h2><div class="hs">' + x.artists.map(a => av(a)).join('') + '</div>' : '')
       + (x.songs.length ? '<h2>' + (top ? 'More songs' : 'Songs') + '</h2>' + list(x.songs, 's', { label: 'Search results' }) : '')
       + (x.foreign.length ? '<h2>International</h2>' + list(x.foreign, 'sf', { label: 'International' }) : '')
       + (x.albums.length ? '<h2>Albums</h2><div class="hs">' + x.albums.map(ac).join('') + '</div>' : '')
-      + (top || x.artists.length || x.songs.length || x.foreign.length ? '' : `<p class="e">No results for “${esc(q)}”. Try different words.</p>`);
+      + (top || x.best || x.artists.length || x.songs.length || x.foreign.length ? '' : `<p class="e">No results for “${esc(q)}”. Try different words.</p>`);
   } catch { if (n === tok && $('#res')) $('#res').innerHTML = '<p class="er">Couldn’t reach the music source. Check your connection and try again.</p>'; }
 }
 const ch = () => { const c = $('#ch'); if (c) c.innerHTML = st.hist.filter(h => h.includes($('#q').value)).slice(0, 8).map(chip).join(''); };

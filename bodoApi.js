@@ -100,11 +100,70 @@ function parseExt(d) {
   }
   return out.filter(t => t.title);
 }
+/* ---------- smart matching for MP3.pm songs ----------
+   MP3.pm spells artists its own way ("Edd Sheraan" instead of "Ed Sheeran") and a search for "Perfect" returns
+   every song with that word. So we first ask Deezer which songs are really popular under that name (real title,
+   artist, length), then pick the MP3.pm entries that match them by SOUND of the artist + song length, not spelling. */
+const dzRefs = q => cached('dz' + slug(q).slice(0, 80), 6 * 60 * MIN, async () => {
+  const r = await fetch(`${WORKER}/dz?q=${encodeURIComponent(q)}`);
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  const j = await r.json();
+  return (j.data || []).map(x => ({ title: x.title_short || x.title || '', artist: (x.artist && x.artist.name) || '', duration: x.duration || 0, rank: x.rank || 0 })).filter(x => x.title && x.artist);
+});
+const words = s => String(s || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+// title without "(Official Video)", "[Remastered]", "feat. ..."
+const core = s => words(String(s || '').replace(/[\(\[][^\)\]]*[\)\]]/g, ' ').replace(/\b(feat|ft|featuring)\b.*$/i, ' '));
+// words that usually mean "not the original" (the person did not ask for them, so they lose points)
+const BAD_RE = /\b(cover|covers|remix|karaoke|instrumental|live|acoustic|slowed|reverb|sped|speed|nightcore|8d|mashup|tribute|bootleg|rework|piano|lofi|ringtone|reaction|quarantine|parody|demo|vip)\b/;
+function artistSim(a, b) { // "edd sheraan" and "ed sheeran" both sound like "dxrn", so they match
+  const x = skel(a), y = skel(b); if (!x || !y) return 0;
+  if (x === y) return 1;
+  if (Math.min(x.length, y.length) >= 3 && (x.includes(y) || y.includes(x))) return .85;
+  return Math.min(x.length, y.length) >= 3 && lev(x, y) <= 1 ? .8 : 0;
+}
+const durScore = (a, b) => !a || !b ? 0 : Math.abs(a - b) <= 2 ? 1 : Math.abs(a - b) <= 6 ? .5 : Math.abs(a - b) > 20 ? -1 : 0;
+function pickRefs(res, q) { // the real songs this search most likely means, most popular first
+  const qc = core(q), qt = qc.split(' ').filter(Boolean), seen = new Set(), out = [];
+  const byRank = (a, b) => b.rank - a.rank;
+  const exact = res.filter(x => core(x.title) === qc).sort(byRank).map(x => ({ ...x, exact: 1 }));
+  const part = res.filter(x => core(x.title) !== qc && qt.every(w => (core(x.title) + ' ' + core(x.artist)).includes(w))).sort(byRank).map(x => ({ ...x, exact: 0 }));
+  for (const x of [...exact, ...part]) { const k = core(x.title) + '|' + skel(x.artist); if (seen.has(k)) continue; seen.add(k); out.push(x); }
+  return out.slice(0, 6);
+}
+export function rankForeign(list, q, refs = []) {
+  const qc = core(q), qt = qc.split(' ').filter(Boolean), qBad = BAD_RE.test(words(q));
+  const refTitles = new Set(refs.map(r => core(r.title)));
+  const scored = list.map((t, i) => {
+    const tc = core(t.title), tt = tc.split(' ').filter(Boolean);
+    let s = 0;
+    if (tc === qc || refTitles.has(tc)) s += 30;
+    else if (qt.length && qt.every(w => tt.includes(w))) s += 12 - Math.min(12, 2 * (tt.length - qt.length));
+    if (!qBad && BAD_RE.test(words(t.title))) s -= 40;
+    let ref = 0;
+    refs.forEach((r, j) => {
+      const rt = core(r.title), ok = tc === rt ? 1 : tc.startsWith(rt + ' ') ? .5 : 0; if (!ok) return;
+      const d = durScore(t.duration, r.duration), sim = t.artist ? artistSim(t.artist, r.artist) : (d === 1 ? .6 : 0);
+      if (!sim) return;
+      const v = ((ok === 1 ? 30 : 10) + sim * 40 + (d > 0 ? 10 * d : 15 * d)) * (r.exact ? 1 : .6) * (1 - .1 * j);
+      if (v > ref) ref = v;
+    });
+    return { t, s: s + ref - i * .01, ref };
+  }).sort((a, b) => b.s - a.s);
+  const top = scored[0];
+  return { list: scored.map(x => x.t), best: top && top.ref > 0 && top.s >= 80 ? top.t : null };
+}
 export async function foreignSearch(q) {
-  const raw = q.trim();
-  if (!/[a-z]/i.test(raw) || /[\u0600-\u06FF]/.test(raw)) return []; // MP3.pm is for English-spelled searches
-  const k = slug(raw); if (k.length < 2) return [];
-  return cached('fs2' + k, 30 * MIN, async () => parseExt(await extDoc(`https://s-${k}.mp3.pm/`)).slice(0, 30));
+  const raw = q.trim(), none = { list: [], best: null };
+  if (!/[a-z]/i.test(raw) || /[\u0600-\u06FF]/.test(raw)) return none; // MP3.pm is for English-spelled searches
+  const k = slug(raw); if (k.length < 2) return none;
+  const refs = pickRefs(await dzRefs(raw).catch(() => []), raw); // if Deezer is unreachable we still rank by title
+  const keys = [k]; // MP3.pm may not know the artist's spelling, so also search with the real title (and real artist + title)
+  if (refs[0]) [slug(refs[0].title), slug(refs[0].artist + ' ' + refs[0].title)].forEach(x => { if (x.length >= 2 && !keys.includes(x)) keys.push(x); });
+  const lists = await Promise.all(keys.map(x => cached('fs3' + x.slice(0, 60), 30 * MIN, async () => parseExt(await extDoc(`https://s-${x.slice(0, 60).replace(/-+$/, '')}.mp3.pm/`)).slice(0, 30)).catch(() => [])));
+  const seen = new Set(), all = [];
+  lists.flat().forEach(t => { if (!seen.has(t.id)) { seen.add(t.id); all.push(t); } });
+  const r = rankForeign(all, raw, refs);
+  return { list: r.list.slice(0, 30), best: r.best };
 }
 
 /* ---------- text matching (Arabic spelling + English/Franco) ---------- */
@@ -227,10 +286,10 @@ export async function resolve(t) { // fetch the real mp3 + cover when a song is 
 const sm = new Map();
 export async function search(q) {
   const raw = q.trim(), key = norm(raw);
-  if (raw.length < 2) return { artists: [], songs: [], albums: [], topArtist: null, popular: [], latest: [], foreign: [] };
+  if (raw.length < 2) return { artists: [], songs: [], albums: [], topArtist: null, popular: [], latest: [], foreign: [], best: null };
   const hit = sm.get(key); if (hit && Date.now() - hit.t < 10 * MIN) return hit.v;
   const n = key, toks = n.split(' ').filter(Boolean), qs = skel(raw);
-  const foreignP = foreignSearch(raw).catch(() => []);
+  const foreignP = foreignSearch(raw).catch(() => ({ list: [], best: null }));
   const [dir, ...lists] = await Promise.all([directory().catch(() => []), ...variants(raw).map(v => doc('search.php?q=' + encodeURIComponent(v)).then(d => parseSongs(d)).catch(() => []))]);
   const artists = dir.map(a => ({ ...a, s: scoreArtist(a, n, toks, qs) })).filter(a => a.s > 0).sort((a, b) => b.s - a.s).slice(0, 10);
   let found = lists.flat();
@@ -251,7 +310,8 @@ export async function search(q) {
   }
   const seen = new Set([...popular, ...latest].map(t => t.id)), songs = [];
   found.forEach(t => { if (!seen.has(t.id)) { seen.add(t.id); songs.push(t); } });
-  const v = { artists, songs: songs.slice(0, 40), albums, topArtist: top, popular, latest, foreign: await foreignP };
+  const fr = await foreignP;
+  const v = { artists, songs: songs.slice(0, 40), albums, topArtist: top, popular, latest, foreign: fr.list.filter(t => t !== fr.best), best: fr.best };
   sm.set(key, { t: Date.now(), v });
   return v;
 }
