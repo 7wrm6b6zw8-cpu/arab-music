@@ -20,7 +20,7 @@ function cached(key, ttl, fn) {
   fly.set(key, p); return p;
 }
 try { // keep localStorage small
-  const ks = []; for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (/^am_c_(s|ar|al)\d/.test(k)) ks.push(k); }
+  const ks = []; for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (/^am_c_(s\d|sm\d|ar|al|fa4|fp|fs4)/.test(k)) ks.push(k); }
   if (ks.length > 350) ks.map(k => [k, (JSON.parse(localStorage.getItem(k)) || {}).t || 0]).sort((a, b) => a[1] - b[1]).slice(0, ks.length - 250).forEach(([k]) => localStorage.removeItem(k));
 } catch {}
 
@@ -78,7 +78,7 @@ const slug = s => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^
 function parseExt(d) {
   const out = [], seen = new Set();
   for (const li of d.querySelectorAll('li')) {
-    let song = null, any = null, who = null;
+    let song = null, any = null, who = null, whoHost = '';
     for (const a of li.querySelectorAll('a[href]')) {
       let u; try { u = new URL(a.getAttribute('href'), 'https://mp3.pm/'); } catch { continue; }
       if (!/(^|\.)mp3\.pm$/.test(u.hostname)) continue;
@@ -86,7 +86,7 @@ function parseExt(d) {
         const t = txt(a);
         any = any || [a, u];
         if (t && !/^\(?download\)?$/i.test(t) && !song) song = [a, u]; // skip the "(download)" button, keep the real title link
-      } else if (u.pathname === '/' && /^\d+-/.test(u.hostname) && !who) who = a;
+      } else if (u.pathname === '/' && /^\d+-/.test(u.hostname) && !who) { who = a; whoHost = u.hostname; }
     }
     if (!song && any) { // no title link found: build a title from the address
       const w = any[1].pathname.replace(/^\/song\/\d+-/, '').replace(/\/$/, '').replace(/-/g, ' ');
@@ -96,7 +96,7 @@ function parseExt(d) {
     const id = 'm' + song[1].pathname.match(/^\/song\/(\d+)-/)[1];
     if (seen.has(id)) continue; seen.add(id);
     const dm = txt(li).match(/(\d{1,2}):(\d{2})(?::(\d{2}))?\s*$/);
-    out.push({ id, title: txt(song[0]), artist: who ? txt(who) : '', artistId: null, album: '', cover: '', duration: dm && !dm[3] ? +dm[1] * 60 + +dm[2] : 0, plays: 0, mp3: null, src: 'mp3pm', page: `https://${song[1].hostname}${song[1].pathname}` });
+    out.push({ id, title: txt(song[0]), artist: who ? txt(who) : '', artistId: null, album: '', cover: '', duration: dm && !dm[3] ? +dm[1] * 60 + +dm[2] : 0, plays: 0, mp3: null, artistHost: whoHost, src: 'mp3pm', page: `https://${song[1].hostname}${song[1].pathname}` });
   }
   return out.filter(t => t.title);
 }
@@ -104,11 +104,11 @@ function parseExt(d) {
    MP3.pm spells artists its own way ("Edd Sheraan" instead of "Ed Sheeran") and a search for "Perfect" returns
    every song with that word. So we first ask Deezer which songs are really popular under that name (real title,
    artist, length), then pick the MP3.pm entries that match them by SOUND of the artist + song length, not spelling. */
-const dzRefs = q => cached('dz' + slug(q).slice(0, 80), 6 * 60 * MIN, async () => {
+const dzRefs = q => cached('dz2' + slug(q).slice(0, 80), 6 * 60 * MIN, async () => {
   const r = await fetch(`${WORKER}/dz?q=${encodeURIComponent(q)}`);
   if (!r.ok) throw new Error('HTTP ' + r.status);
   const j = await r.json();
-  return (j.data || []).map(x => ({ title: x.title_short || x.title || '', artist: (x.artist && x.artist.name) || '', duration: x.duration || 0, rank: x.rank || 0 })).filter(x => x.title && x.artist);
+  return (j.data || []).map(x => ({ title: x.title_short || x.title || '', artist: (x.artist && x.artist.name) || '', duration: x.duration || 0, rank: x.rank || 0, cover: x.cover || '' })).filter(x => x.title && x.artist);
 });
 const words = s => String(s || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
 // title without "(Official Video)", "[Remastered]", "feat. ..."
@@ -121,6 +121,7 @@ function artistSim(a, b) { // "edd sheraan" and "ed sheeran" both sound like "dx
   if (Math.min(x.length, y.length) >= 3 && (x.includes(y) || y.includes(x))) return .85;
   return Math.min(x.length, y.length) >= 3 && lev(x, y) <= 1 ? .8 : 0;
 }
+const VID_RE = /\b(official|music video|video|lyrics?|visuali[sz]er|hd|hq)\b/; // probably a video rip: allowed, but a clean copy is preferred
 const durScore = (a, b) => !a || !b ? 0 : Math.abs(a - b) <= 2 ? 1 : Math.abs(a - b) <= 6 ? .5 : Math.abs(a - b) > 20 ? -1 : 0;
 function pickRefs(res, q) { // the real songs this search most likely means, most popular first
   const qc = core(q), qt = qc.split(' ').filter(Boolean), seen = new Set(), out = [];
@@ -139,31 +140,77 @@ export function rankForeign(list, q, refs = []) {
     if (tc === qc || refTitles.has(tc)) s += 30;
     else if (qt.length && qt.every(w => tt.includes(w))) s += 12 - Math.min(12, 2 * (tt.length - qt.length));
     if (!qBad && BAD_RE.test(words(t.title))) s -= 40;
-    let ref = 0;
+    else if (VID_RE.test(words(t.title))) s -= 12;
+    if (words(t.title) === qc) s += 6;
+    let ref = 0, cov = '';
     refs.forEach((r, j) => {
       const rt = core(r.title), ok = tc === rt ? 1 : tc.startsWith(rt + ' ') ? .5 : 0; if (!ok) return;
       const d = durScore(t.duration, r.duration), sim = t.artist ? artistSim(t.artist, r.artist) : (d === 1 ? .6 : 0);
       if (!sim) return;
       const v = ((ok === 1 ? 30 : 10) + sim * 40 + (d > 0 ? 10 * d : 15 * d)) * (r.exact ? 1 : .6) * (1 - .1 * j);
-      if (v > ref) ref = v;
+      if (v > ref) { ref = v; cov = r.cover || ''; }
     });
+    if (ref > 0 && cov && !t.cover) t.cover = cov; // real album art from Deezer
     return { t, s: s + ref - i * .01, ref };
   }).sort((a, b) => b.s - a.s);
   const top = scored[0];
-  return { list: scored.map(x => x.t), best: top && top.ref > 0 && top.s >= 80 ? top.t : null };
+  const best = top && top.ref > 0 && top.s >= 80 ? top.t : null;
+  const alts = best ? scored.filter(x => x.t !== best && x.ref > 0 && x.s >= 60 && artistSim(x.t.artist, best.artist) >= .8).slice(0, 4).map(x => x.t) : [];
+  return { list: scored.map(x => x.t), best, alts };
 }
 export async function foreignSearch(q) {
-  const raw = q.trim(), none = { list: [], best: null };
+  const raw = q.trim(), none = { list: [], best: null, alts: [] };
   if (!/[a-z]/i.test(raw) || /[\u0600-\u06FF]/.test(raw)) return none; // MP3.pm is for English-spelled searches
   const k = slug(raw); if (k.length < 2) return none;
   const refs = pickRefs(await dzRefs(raw).catch(() => []), raw); // if Deezer is unreachable we still rank by title
   const keys = [k]; // MP3.pm may not know the artist's spelling, so also search with the real title (and real artist + title)
   if (refs[0]) [slug(refs[0].title), slug(refs[0].artist + ' ' + refs[0].title)].forEach(x => { if (x.length >= 2 && !keys.includes(x)) keys.push(x); });
-  const lists = await Promise.all(keys.map(x => cached('fs3' + x.slice(0, 60), 30 * MIN, async () => parseExt(await extDoc(`https://s-${x.slice(0, 60).replace(/-+$/, '')}.mp3.pm/`)).slice(0, 30)).catch(() => [])));
+  const lists = await Promise.all(keys.map(x => mp3Search(x).catch(() => [])));
   const seen = new Set(), all = [];
   lists.flat().forEach(t => { if (!seen.has(t.id)) { seen.add(t.id); all.push(t); } });
   const r = rankForeign(all, raw, refs);
-  return { list: r.list.slice(0, 30), best: r.best };
+  return { list: r.list.slice(0, 30), best: r.best, alts: r.alts };
+}
+
+
+/* ---------- international artists (songs come from MP3.pm, photos and popularity from Deezer) ---------- */
+export const FOREIGN_ARTISTS = ["Ed Sheeran", "Eminem", "Taylor Swift", "The Weeknd", "Drake", "Coldplay", "Imagine Dragons", "Linkin Park", "Rihanna", "Justin Bieber", "Ariana Grande", "Billie Eilish", "Dua Lipa", "Bruno Mars", "Adele", "Maroon 5", "Post Malone", "Michael Jackson", "Queen", "The Beatles", "Metallica", "Shakira", "Selena Gomez", "Katy Perry", "Lady Gaga", "Beyonce", "Sia", "Sam Smith", "Charlie Puth", "Shawn Mendes", "Harry Styles", "One Direction", "Avicii", "David Guetta", "Calvin Harris", "Marshmello", "Martin Garrix", "Alan Walker", "The Chainsmokers", "Kendrick Lamar", "50 Cent", "Travis Scott", "Nirvana", "Guns N' Roses", "AC/DC", "Pink Floyd", "Bon Jovi", "Whitney Houston", "Celine Dion", "Mariah Carey", "Elton John", "Frank Sinatra", "Elvis Presley", "Bob Marley", "Akon", "Pitbull", "Enrique Iglesias", "Britney Spears", "Lana Del Rey", "Olivia Rodrigo", "Doja Cat", "Snoop Dogg", "Dr. Dre", "2Pac", "Jay-Z", "Kanye West", "Michael Buble", "Westlife", "Backstreet Boys"];
+const dzGet = (path, q) => fetch(`${WORKER}/${path}?${q}`).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); });
+export const foreignInfo = name => cached('fi2' + slug(name), 7 * DAY, async () => { // artist photo (high quality) + Deezer id
+  const list = (await dzGet('dza', 'q=' + encodeURIComponent(name))).data || [], nc = core(name);
+  const hit = list.find(x => core(x.name) === nc) || list.find(x => artistSim(x.name, name) >= .85);
+  if (!hit) throw new Error('not found');
+  return { id: hit.id, name: hit.name, picture: hit.picture || '' };
+});
+const dzTop = id => cached('ft3' + id, DAY, async () => (((await dzGet('dztop', 'id=' + id)).data) || []).map(x => ({ title: x.title_short || x.title || '', duration: x.duration || 0, rank: x.rank || 0, cover: x.cover || '' })).filter(x => x.title));
+const mp3Search = k => cached('fs4' + k.slice(0, 60), 30 * MIN, async () => parseExt(await extDoc(`https://s-${k.slice(0, 60).replace(/-+$/, '')}.mp3.pm/`)).slice(0, 40));
+export const foreignArtist = name => cached('fa4' + slug(name), 3 * 60 * MIN, async () => {
+  const info = await foreignInfo(name).catch(() => null);
+  const top = info ? await dzTop(info.id).catch(() => []) : [];
+  // search MP3.pm by the artist name AND by their most popular song titles (MP3.pm spells artists its own way)
+  const qs = [...new Set([slug(name), ...top.slice(0, 6).map(x => slug(x.title))])].filter(x => x.length >= 2);
+  const found = (await Promise.all(qs.map(q => mp3Search(q).catch(() => [])))).flat();
+  const mine = found.filter(t => artistSim(t.artist, name) >= .8);
+  const host = (mine.find(t => t.artistHost) || {}).artistHost; // the artist's own MP3.pm page has more songs
+  const pages = host ? (await Promise.all([1, 2, 3].map(p => cached('fp' + host + p, 3 * 60 * MIN, async () => parseExt(await extDoc(`https://${host}/${p > 1 ? 'page/' + p + '/' : ''}`))).catch(() => [])))).flat()
+    .filter(t => !t.artist || artistSim(t.artist, name) >= .8) : [];
+  const topBy = new Map(); top.forEach(d => { const k = core(d.title); if (!topBy.has(k)) topBy.set(k, d); });
+  const groups = new Map(); let i = 0;
+  for (const t of [...mine, ...pages]) { // one entry per song title: keep the best copy (not a cover/remix/video, right length)
+    const k = core(t.title); if (!k) continue; i++;
+    const d = topBy.get(k), w = words(t.title);
+    const v = (BAD_RE.test(w) ? -40 : VID_RE.test(w) ? -12 : 0) + (d ? 20 * durScore(t.duration, d.duration) : 0) + (w === k ? 6 : 0) - i * .01;
+    const g = groups.get(k);
+    if (!g || v > g.v) groups.set(k, { t, d, v, bad: BAD_RE.test(w), n: g ? g.n : i });
+  }
+  const songs = [...groups.values()].sort((a, b) => (a.bad - b.bad) || ((b.d ? b.d.rank + 1e6 : 0) - (a.d ? a.d.rank + 1e6 : 0)) || a.n - b.n).slice(0, 60)
+    .map(({ t, d }) => ({ ...t, id: t.id, artist: name, fa: name, artistId: null, cover: (d && d.cover) || t.cover || '' }));
+  return { name, cover: info ? info.picture : '', songs, count: songs.length };
+});
+export function matchForeignArtists(q) { // typing "ed sheeran" or "sheeran" shows the artist in search
+  const qc = core(q); if (qc.length < 4 || /[\u0600-\u06FF]/.test(q)) return [];
+  const qt = qc.split(' ').filter(Boolean);
+  return FOREIGN_ARTISTS.filter(n => { const nc = core(n), nt = nc.split(' '); return nc.includes(qc) || qt.every(w => nt.some(x => x.startsWith(w))) || (skel(q).length >= 4 && artistSim(n, q) >= .8); }).slice(0, 4);
 }
 
 /* ---------- text matching (Arabic spelling + English/Franco) ---------- */
@@ -241,7 +288,7 @@ const loadArtist = id => cached('ar' + id, DAY, async () => {
   const songs = parseSongs(d, { artist: name, artistId: id, cover });
   return { id, name, cover, count: +(txt(d.body).match(/عدد الأغاني:?\s*(\d+)/)?.[1] || songs.length), albums: parseAlbums(d, { artist: name }), songs: songs.map(s => [s.id, s.title, s.plays, s.duration]) };
 });
-const expand = a => a.songs.map(([id, title, plays, duration]) => ({ id, title, plays, duration, artist: a.name, artistId: a.id, album: '', cover: a.cover, mp3: null }));
+const expand = a => a.songs.map(([id, title, plays, duration]) => ({ id, title, plays, duration, artist: a.name, artistId: a.id, album: '', cover: '', fb: a.cover, mp3: null }));
 export const artist = async id => { const a = await loadArtist(id); return { ...a, songs: expand(a) }; };
 export const artistSongs = async id => expand(await loadArtist(id));
 export const album = id => cached('al' + id, DAY, async () => {
@@ -286,10 +333,10 @@ export async function resolve(t) { // fetch the real mp3 + cover when a song is 
 const sm = new Map();
 export async function search(q) {
   const raw = q.trim(), key = norm(raw);
-  if (raw.length < 2) return { artists: [], songs: [], albums: [], topArtist: null, popular: [], latest: [], foreign: [], best: null };
+  if (raw.length < 2) return { artists: [], songs: [], albums: [], topArtist: null, popular: [], latest: [], foreign: [], best: null, alts: [], fa: [] };
   const hit = sm.get(key); if (hit && Date.now() - hit.t < 10 * MIN) return hit.v;
   const n = key, toks = n.split(' ').filter(Boolean), qs = skel(raw);
-  const foreignP = foreignSearch(raw).catch(() => ({ list: [], best: null }));
+  const foreignP = foreignSearch(raw).catch(() => ({ list: [], best: null, alts: [] }));
   const [dir, ...lists] = await Promise.all([directory().catch(() => []), ...variants(raw).map(v => doc('search.php?q=' + encodeURIComponent(v)).then(d => parseSongs(d)).catch(() => []))]);
   const artists = dir.map(a => ({ ...a, s: scoreArtist(a, n, toks, qs) })).filter(a => a.s > 0).sort((a, b) => b.s - a.s).slice(0, 10);
   let found = lists.flat();
@@ -311,7 +358,7 @@ export async function search(q) {
   const seen = new Set([...popular, ...latest].map(t => t.id)), songs = [];
   found.forEach(t => { if (!seen.has(t.id)) { seen.add(t.id); songs.push(t); } });
   const fr = await foreignP;
-  const v = { artists, songs: songs.slice(0, 40), albums, topArtist: top, popular, latest, foreign: fr.list.filter(t => t !== fr.best), best: fr.best };
+  const v = { artists, songs: songs.slice(0, 40), albums, topArtist: top, popular, latest, foreign: fr.list.filter(t => t !== fr.best), best: fr.best, alts: fr.alts, fa: matchForeignArtists(raw) };
   sm.set(key, { t: Date.now(), v });
   return v;
 }

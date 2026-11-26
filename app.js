@@ -61,12 +61,13 @@ $('#hs').innerHTML = ic('search');
 /* ---------- building blocks ---------- */
 const art = t => t.cover ? `<img src="${esc(t.cover)}" alt="" loading="lazy">` : `<div class="ph" style="--p:${pcol(t.title)}"${t.src === 'mp3pm' ? '' : ` data-lz="${t.id}"`}>${initial(t.title)}</div>`;
 const av = (a, ring) => `<div class="av${ring ? ' ring' : ''}" data-act="artist" data-id="${a.id}">${a.cover ? `<img class="c" src="${esc(a.cover)}" alt="">` : `<div class="ph c" style="--p:${pcol(a.name)}" data-az="${a.id}" data-cls="c">${initial(a.name)}</div>`}<span>${esc(a.name)}</span></div>`;
+const avf = n => `<div class="av" data-act="fartist" data-n="${esc(n)}"><div class="ph c" style="--p:${pcol(n)}" data-fz="${esc(n)}" data-cls="c">${initial(n)}</div><span>${esc(n)}</span></div>`;
 const ac = a => `<div class="ac" data-act="album" data-id="${a.id}">${a.cover ? `<img src="${esc(a.cover)}" alt="" loading="lazy">` : `<div class="ph" style="--p:${pcol(a.title)}">${initial(a.title)}</div>`}<b>${esc(a.title)}</b><small>${esc([a.year, a.artist].filter(Boolean).join(' · '))}</small></div>`;
 const mixCard = s => { mixReg.set(s.key, s); const g = grad(s.key); return `<div class="mc" data-act="mixopen" data-k="${esc(s.key)}" style="--c1:${g[0]};--c2:${g[1]}"><b>${esc(s.title)}</b><small>${esc(s.sub || '')}</small></div>`; };
 const heroCard = (s, badge) => { mixReg.set(s.key, s); const g = grad(s.key); return `<div class="hero2" data-act="mixopen" data-k="${esc(s.key)}" style="--c1:${g[0]};--c2:${g[1]}"><span class="badge">${ic('sparkle')}${esc(badge)}</span><h2>${esc(s.title)}</h2><p>${esc(s.sub || '')}</p><div class="hact"><button class="pbtn" data-act="mixplay" data-k="${esc(s.key)}" aria-label="Play">${ic('play')}</button><button class="sbtn" data-act="mixshuf" data-k="${esc(s.key)}" aria-label="Shuffle">${ic('shuf')}</button><span class="cnt">About 40 songs</span></div></div>`; };
 const row = (t, c, i, o) => {
   const a = `data-c="${esc(c)}" data-i="${i}"`, f = isFav(t);
-  const who = t.artistId ? `<span class="lnk" data-act="artist" data-id="${t.artistId}">${esc(t.artist)}</span>` : esc(t.artist);
+  const who = t.artistId ? `<span class="lnk" data-act="artist" data-id="${t.artistId}">${esc(t.artist)}</span>` : t.fa ? `<span class="lnk" data-act="fartist" data-n="${esc(t.fa)}">${esc(t.artist)}</span>` : esc(t.artist);
   const dlm = off.has(t.id) ? `<i class="dlm">${ic('dlok')}</i>` : '';
   return `<div class="row${isCur(t) ? ' cur' : ''}" data-id="${t.id}">${o.num ? `<span class="n">${i + 1}</span>` : ''}${art(t)}<div class="m" data-act="play" ${a}><b>${esc(t.title)}</b><small>${dlm}${who}${t.album ? ' · ' + esc(t.album) : ''}</small></div><span class="eq" aria-hidden="true"><i></i><i></i><i></i></span><button data-act="fav" ${a} class="${f ? 'on' : ''}" aria-label="Favorite">${ic(f ? 'heartF' : 'heart')}</button><button data-act="more" ${a} aria-label="More">${ic('dots')}</button></div>`;
 };
@@ -77,13 +78,17 @@ const acts = (c, extra = '') => `<div class="acts"><button class="big" data-act=
 const tracksOf = metas => metas.map(m => ({ id: m.id, title: m.title, artist: m.artist, artistId: m.artistId, album: m.album, duration: m.duration, plays: 0, cover: '', mp3: null }));
 
 // covers and artist photos load only when they scroll into view
+let lzBusy = 0; const lzQ = []; // only a few covers are fetched at a time
+const lzPump = () => { while (lzBusy < 4 && lzQ.length) { const f = lzQ.shift(); lzBusy++; f().finally(() => { lzBusy--; lzPump(); }); } };
+const lzRun = f => { lzQ.push(f); lzPump(); };
 const io = new IntersectionObserver(es => es.forEach(e => {
   if (!e.isIntersecting) return; const n = e.target; io.unobserve(n);
   const swap = u => { if (!u || !n.isConnected) return; const im = new Image(); im.src = u; im.alt = ''; im.className = n.dataset.cls || ''; n.replaceWith(im); };
-  if (n.dataset.lz) { const t = byId.get(n.dataset.lz); if (t && navigator.onLine) api.resolve(t).then(() => swap(t.cover)).catch(() => {}); }
+  if (n.dataset.lz) { const t = byId.get(n.dataset.lz); if (t && navigator.onLine) lzRun(() => api.resolve(t).then(() => swap(t.cover || t.fb)).catch(() => {})); }
   else if (n.dataset.az && navigator.onLine) api.artist(+n.dataset.az).then(a => swap(a.cover)).catch(() => {});
+  else if (n.dataset.fz && navigator.onLine) api.foreignInfo(n.dataset.fz).then(a => swap(a.picture)).catch(() => {});
 }), { rootMargin: '250px' });
-const lazy = () => document.querySelectorAll('.ph[data-lz],.ph[data-az]').forEach(n => { if (!n.__o) { n.__o = 1; io.observe(n); } });
+const lazy = () => document.querySelectorAll('.ph[data-lz],.ph[data-az],.ph[data-fz]').forEach(n => { if (!n.__o) { n.__o = 1; io.observe(n); } });
 new MutationObserver(lazy).observe(el, { childList: true, subtree: true });
 document.addEventListener('error', e => { // a picture that can't load (offline) becomes a colored tile
   const n = e.target; if (!n || n.tagName !== 'IMG' || n.dataset.bad) return; n.dataset.bad = 1;
@@ -125,7 +130,7 @@ function openSheet(t, c, i) {
   $('#sheet').innerHTML = `<div class="scrim" data-act="sclose"></div><div class="panel"><div class="shead">${art(t)}<div><b>${esc(t.title)}</b><small>${esc(t.artist)}</small></div></div>`
     + item('dl', has ? 'dlok' : 'download', has ? 'Downloaded · tap to remove' : busy ? 'Downloading…' : 'Download for offline', has ? 'Plays without internet' : 'Listen without internet')
     + item('pl', 'plus', 'Add to playlist') + item('next', 'queueadd', 'Play next') + item('queue', 'list', 'Add to queue')
-    + (t.artistId ? item('artist', 'user', 'Go to artist', esc(t.artist)) : '') + item('share', 'share', 'Share')
+    + (t.artistId ? item('artist', 'user', 'Go to artist', esc(t.artist)) : t.fa ? item('fartist', 'user', 'Go to artist', esc(t.artist)) : '') + item('share', 'share', 'Share')
     + (sheetC.startsWith('pl:') ? item('rm', 'x', 'Remove from this playlist') : '') + '</div>';
   const s = $('#sheet'); s.hidden = false; requestAnimationFrame(() => s.classList.add('open'));
 }
@@ -168,14 +173,15 @@ async function run(q) {
     const x = await api.search(q); if (n !== tok || !$('#res')) return;
     const top = x.topArtist;
     r.innerHTML = (top ? `<div class="trc" data-act="artist" data-id="${top.id}">${top.cover ? `<img class="c" src="${esc(top.cover)}" alt="">` : `<div class="ph c" style="--p:${pcol(top.name)}">${initial(top.name)}</div>`}<div><b>${esc(top.name)}</b><small>Artist · ${top.count} songs · all songs and albums</small></div>${ic('fwd')}</div>` : '')
-      + (x.best ? '<h2>Best match</h2>' + list([x.best], 'sb', { label: 'Best match' }) : '')
+      + (x.fa && x.fa.length ? '<h2>International artists</h2><div class="hs">' + x.fa.map(avf).join('') + '</div>' : '')
+      + (x.best ? '<h2>Best match</h2>' + list([x.best], 'sb', { label: 'Best match' }) + (lists.sb = [x.best, ...(x.alts || [])], '') : '')
       + (x.popular.length ? '<h2>Popular songs</h2>' + list(x.popular, 'sp', { label: top.name }) + `<button class="chip" data-act="artist" data-id="${top.id}">See all ${top.count} songs</button>` : '')
       + (x.latest.length ? '<h2>Latest releases</h2>' + list(x.latest, 'sl', { label: top.name }) : '')
       + (x.artists.length > 1 || (x.artists.length && !top) ? '<h2>Artists</h2><div class="hs">' + x.artists.map(a => av(a)).join('') + '</div>' : '')
       + (x.songs.length ? '<h2>' + (top ? 'More songs' : 'Songs') + '</h2>' + list(x.songs, 's', { label: 'Search results' }) : '')
       + (x.foreign.length ? '<h2>International</h2>' + list(x.foreign, 'sf', { label: 'International' }) : '')
       + (x.albums.length ? '<h2>Albums</h2><div class="hs">' + x.albums.map(ac).join('') + '</div>' : '')
-      + (top || x.best || x.artists.length || x.songs.length || x.foreign.length ? '' : `<p class="e">No results for “${esc(q)}”. Try different words.</p>`);
+      + (top || x.best || (x.fa && x.fa.length) || x.artists.length || x.songs.length || x.foreign.length ? '' : `<p class="e">No results for “${esc(q)}”. Try different words.</p>`);
   } catch { if (n === tok && $('#res')) $('#res').innerHTML = '<p class="er">Couldn’t reach the music source. Check your connection and try again.</p>'; }
 }
 const ch = () => { const c = $('#ch'); if (c) c.innerHTML = st.hist.filter(h => h.includes($('#q').value)).slice(0, 8).map(chip).join(''); };
@@ -201,7 +207,8 @@ const V = {
       api.buildMix(m).then(l => { if (ok() && $('#ml')) $('#ml').innerHTML = list(l, 'mx', { label: m.title }); }).catch(() => { if (ok() && $('#ml')) $('#ml').innerHTML = '<p class="er">Couldn’t build this mix. Check your connection.</p>'; });
       return;
     }
-    el.innerHTML = head + '<div id="hr"><div class="hero2 sk"></div></div>' + grid + '<div id="t10"></div><div id="pa"></div><div id="mx"></div><h2>Moods and genres</h2><div class="hs">' + api.MOODS.map(mixCard).join('') + '</div><div id="na"></div>' + (st.fav.length ? '<h2>Your favorites</h2>' + list(st.fav.slice(0, 3), 'hf', { label: 'Favorites' }) : '');
+    el.innerHTML = head + '<div id="hr"><div class="hero2 sk"></div></div>' + grid + '<div id="t10"></div><div id="pa"></div><div id="fa"></div><div id="mx"></div><h2>Moods and genres</h2><div class="hs">' + api.MOODS.map(mixCard).join('') + '</div><div id="na"></div>' + (st.fav.length ? '<h2>Your favorites</h2>' + list(st.fav.slice(0, 3), 'hf', { label: 'Favorites' }) : '');
+    $('#fa').innerHTML = '<h2>International artists</h2><div class="hs">' + api.FOREIGN_ARTISTS.map(avf).join('') + '</div>';
     api.mixSpecs(topIds()).then(sp => { if (!ok()) return; const first = sp[0] || api.MOODS[0]; $('#hr').innerHTML = heroCard(first, 'Made for you · refreshed today'); if (sp.length > 1) $('#mx').innerHTML = '<h2>Made for you</h2><div class="hs">' + sp.slice(1).map(mixCard).join('') + '</div>'; })
       .catch(() => { if (ok()) $('#hr').innerHTML = heroCard(api.MOODS[0], 'Mood mix'); });
     api.home().then(h => { if (!ok()) return; const top = api.dedupe(h.songs).slice(0, 10); if (top.length) $('#t10').innerHTML = '<h2>Top 10 today</h2>' + list(top, 't10', { num: true, label: 'Top 10 today' }); if (h.albums.length) $('#na').innerHTML = '<h2>New albums</h2><div class="hs">' + h.albums.slice(0, 10).map(ac).join('') + '</div>'; })
@@ -221,6 +228,14 @@ const V = {
       const pop = a.songs.slice().sort((x, y) => y.plays - x.plays).slice(0, 10), late = a.songs.slice().sort((x, y) => y.id - x.id).filter(s => !pop.some(p => p.id === s.id)).slice(0, 5);
       el.innerHTML = backBar() + `<div class="hero">${a.cover ? `<img class="c" src="${esc(a.cover)}" alt="">` : `<div class="ph c" style="--p:${pcol(a.name)}">${initial(a.name)}</div>`}<div><small>ARTIST</small><h2>${esc(a.name)}</h2><small>${a.songs.length} songs${a.albums.length ? ' · ' + a.albums.length + ' albums' : ''}</small></div></div>`
         + acts('ar') + '<h2>Popular</h2>' + list(pop, 'ap', { label: a.name }) + (late.length ? '<h2>Latest releases</h2>' + list(late, 'al2', { label: a.name }) : '') + (a.albums.length ? '<h2>Albums</h2><div class="hs">' + a.albums.map(ac).join('') + '</div>' : '') + '<h2>All songs</h2>' + list(a.songs, 'ar', { label: a.name });
+    } catch { if (k === rtok) el.innerHTML = backBar() + '<p class="er">Couldn’t load this artist. Check your connection.</p>'; }
+  },
+  async fartist(name) {
+    el.innerHTML = backBar() + '<p class="ld">Loading…</p>'; const k = rtok;
+    try {
+      const a = await api.foreignArtist(name); if (k !== rtok) return;
+      el.innerHTML = backBar() + `<div class="hero">${a.cover ? `<img class="c" src="${esc(a.cover)}" alt="">` : `<div class="ph c" style="--p:${pcol(a.name)}">${initial(a.name)}</div>`}<div><small>ARTIST</small><h2>${esc(a.name)}</h2><small>${a.songs.length} songs</small></div></div>`
+        + (a.songs.length ? acts('fa') + '<h2>Popular</h2>' + list(a.songs.slice(0, 10), 'fp', { label: a.name }) + (a.songs.length > 10 ? '<h2>All songs</h2>' + list(a.songs, 'fa', { label: a.name }) : (lists.fa = a.songs, '')) : '<p class="e">Couldn’t find songs for this artist on the source right now.</p>');
     } catch { if (k === rtok) el.innerHTML = backBar() + '<p class="er">Couldn’t load this artist. Check your connection.</p>'; }
   },
   async album(id) {
@@ -258,7 +273,7 @@ const V = {
   }
 };
 const NAV = [['home', 'home', 'Home'], ['search', 'search', 'Search'], ['library', 'library', 'Library'], ['favorites', 'heart', 'Favorites'], ['playlists', 'list', 'Playlists']];
-const NAVV = NAV.map(n => n[0]), SUBV = ['artist', 'album', 'mix', 'downloads'];
+const NAVV = NAV.map(n => n[0]), SUBV = ['artist', 'fartist', 'album', 'mix', 'downloads'];
 const renderNav = () => { $('#nav').innerHTML = NAV.map(([k, i, n]) => `<button data-go="${k}" class="${k === st.tab ? 'on' : ''}" aria-label="${n}">${ic(i)}</button>`).join(''); };
 function go(v, arg, o = {}) {
   if (!o.back) { if (SUBV.includes(v)) st.stack.push({ v: st.view, a: st.arg, y: scrollY }); else st.stack = []; }
@@ -350,7 +365,10 @@ async function next(auto) {
 }
 function prev() { if (!st.queue.length) return; if (au.currentTime > 3) { au.currentTime = 0; return; } st.idx = (st.idx - 1 + st.queue.length) % st.queue.length; load(); }
 au.onended = () => { if (isReal()) next(true); };
-au.onerror = () => { if (!isReal()) return; st.err = 'This song isn’t available right now.'; drawP(); };
+au.onerror = () => {
+  if (!isReal()) return; st.err = 'This song isn’t available right now.'; drawP();
+  if (au.currentTime < 1 && ++st.fails <= 3) { const my = lt; setTimeout(() => { if (my === lt) next(true); }, 1200); } // never started: try the next copy of the song
+};
 au.onplay = au.onpause = au.onloadedmetadata = () => drawP();
 au.ontimeupdate = () => {
   const r = $('#mpr'); if (r) r.style.strokeDashoffset = 119.38 * (1 - (au.duration ? au.currentTime / au.duration : 0));
@@ -373,7 +391,7 @@ function drawP() {
     $('#full').innerHTML = `<div class="fbg">${cover ? `<img src="${esc(cover)}" alt="">` : ''}</div><div class="fc">`
       + `<div class="ftop"><button data-act="close" class="cl" aria-label="Close">${ic('down')}</button><div><small>PLAYING FROM</small><b>${esc(st.src || 'Your queue')}</b></div><button class="cl" data-act="share" aria-label="Share">${ic('share')}</button></div>`
       + (cover ? `<img class="big" src="${esc(cover)}" alt="">` : `<div class="ph big" style="--p:${pcol(t.title)}">${initial(t.title)}</div>`)
-      + `<div class="ftitle"><div><h2>${esc(t.title)}</h2><small>${t.artistId ? `<span class="lnk" data-act="artist" data-id="${t.artistId}">${esc(t.artist)}</span>` : esc(t.artist)}</small></div><button data-act="favnow" class="${f ? 'on' : ''}" aria-label="Favorite">${ic(f ? 'heartF' : 'heart')}</button></div>`
+      + `<div class="ftitle"><div><h2>${esc(t.title)}</h2><small>${t.artistId ? `<span class="lnk" data-act="artist" data-id="${t.artistId}">${esc(t.artist)}</span>` : t.fa ? `<span class="lnk" data-act="fartist" data-n="${esc(t.fa)}">${esc(t.artist)}</span>` : esc(t.artist)}</small></div><button data-act="favnow" class="${f ? 'on' : ''}" aria-label="Favorite">${ic(f ? 'heartF' : 'heart')}</button></div>`
       + (st.err ? `<p class="er">${esc(st.err)}</p>` : '')
       + `<input id="seek" type="range" min="0" max="${au.duration || 0}" step="1" value="${au.currentTime}" dir="ltr"><div class="tm" dir="ltr"><span id="ct">${fmt(au.currentTime)}</span><span id="dt">${fmt(au.duration)}</span></div>`
       + `<div class="ctl" dir="ltr"><button data-act="shuf" class="${st.shuf ? 'on' : ''}" aria-label="Shuffle">${ic('shuf')}</button><button data-act="prev" aria-label="Previous">${ic('prev')}</button><button class="pp" data-act="pp" aria-label="Play or pause">${pl}</button><button data-act="next" aria-label="Next">${ic('next')}</button><button data-act="rep" class="${st.rep ? 'on' : ''}" aria-label="Repeat">${ic(st.rep === 2 ? 'rep1' : 'rep')}</button></div>`
@@ -400,7 +418,7 @@ document.addEventListener('click', e => {
       ({
         dl: () => { if (off.has(x.id)) { if (confirm('Remove this download?')) off.remove(x.id).then(() => { unmarkDl(x.id); toast('Download removed'); if (st.view === 'downloads') go('downloads', null, { back: 1, y: scrollY }); }); } else enqueue([x]); },
         pl: () => addToPlaylist(x), next: () => queueAdd(x, true), queue: () => queueAdd(x, false),
-        artist: () => { $('#full').hidden = true; go('artist', x.artistId); }, share: () => share(x),
+        artist: () => { $('#full').hidden = true; go('artist', x.artistId); }, fartist: () => { $('#full').hidden = true; go('fartist', x.fa); }, share: () => share(x),
         rm: () => { st.pl[sheetC.slice(3)].splice(sheetI, 1); S('pl', st.pl); V.playlists(); }
       }[d.a] || (() => {}))();
     },
@@ -412,6 +430,7 @@ document.addEventListener('click', e => {
     back: () => { st.open = null; V.playlists(); },
     goback: () => back(),
     artist: () => { $('#full').hidden = true; go('artist', +d.id); },
+    fartist: () => { $('#full').hidden = true; go('fartist', d.n); },
     album: () => go('album', +d.id),
     mixopen: () => { const s = mixOf(); if (s) go('mix', s); },
     mixplay: () => buildPlay(false), mixshuf: () => buildPlay(true),
