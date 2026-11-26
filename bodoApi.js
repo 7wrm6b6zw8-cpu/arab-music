@@ -67,7 +67,6 @@ function parseAlbums(d, ctx = {}) {
   return out;
 }
 
-
 /* ---------- international songs (MP3.pm), reached through the Worker's /ext ---------- */
 const extDoc = async u => {
   const r = await fetch(`${WORKER}/ext?u=${encodeURIComponent(u)}`);
@@ -85,10 +84,10 @@ function parseExt(d) {
       if (/^\/song\/\d+-/.test(u.pathname)) {
         const t = txt(a);
         any = any || [a, u];
-        if (t && !/^\(?download\)?$/i.test(t) && !song) song = [a, u]; // skip the "(download)" button, keep the real title link
+        if (t && !/^\(?download\)?$/i.test(t) && !song) song = [a, u];
       } else if (u.pathname === '/' && /^\d+-/.test(u.hostname) && !who) who = a;
     }
-    if (!song && any) { // no title link found: build a title from the address
+    if (!song && any) {
       const w = any[1].pathname.replace(/^\/song\/\d+-/, '').replace(/\/$/, '').replace(/-/g, ' ');
       song = [{ textContent: w.replace(/\b\w/g, c => c.toUpperCase()) }, any[1]];
     }
@@ -100,18 +99,40 @@ function parseExt(d) {
   }
   return out.filter(t => t.title);
 }
+function rankForeign(items, rawQuery) {
+  const q = String(rawQuery || '').toLowerCase().trim();
+  const tokens = q.split(/[^a-z0-9]+/).filter(Boolean);
+  const noisy = ['cover', 'remix', 'live', 'karaoke', 'instrumental', 'edit', 'mix', 'quarantine', 'tribute', 'slowed', 'sped'];
+  const wantsNoisy = tokens.some(t => noisy.includes(t));
+
+  return [...items]
+    .map((t, idx) => {
+      const hay = `${t.title || ''} ${t.artist || ''}`.toLowerCase();
+      let score = 0;
+      if (q && hay.includes(q)) score += 100;
+      for (const tok of tokens) {
+        if ((t.title || '').toLowerCase().includes(tok)) score += 35;
+        if ((t.artist || '').toLowerCase().includes(tok)) score += 30;
+      }
+      if (t.duration >= 150 && t.duration <= 360) score += 15;
+      if (!wantsNoisy && noisy.some(w => hay.includes(w))) score -= 60;
+      return { t, score, idx };
+    })
+    .sort((a, b) => (b.score - a.score) || (a.idx - b.idx))
+    .map(x => x.t);
+}
 export async function foreignSearch(q) {
   const raw = q.trim();
-  if (!/[a-z]/i.test(raw) || /[\u0600-\u06FF]/.test(raw)) return []; // MP3.pm is for English-spelled searches
+  if (!/[a-z]/i.test(raw) || /[\u0600-\u06FF]/.test(raw)) return [];
   const k = slug(raw); if (k.length < 2) return [];
-  return cached('fs2' + k, 30 * MIN, async () => parseExt(await extDoc(`https://s-${k}.mp3.pm/`)).slice(0, 30));
+  return cached('fs3' + k, 30 * MIN, async () => rankForeign(parseExt(await extDoc(`https://s-${k}.mp3.pm/`)), raw).slice(0, 30));
 }
 
 /* ---------- text matching (Arabic spelling + English/Franco) ---------- */
 const letterNorm = s => s.replace(/[أإآٱ]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه').replace(/[\u064B-\u065F\u0640\u0670]/g, '');
 export const norm = s => letterNorm(String(s || '').toLowerCase()).replace(/ؤ/g, 'و').replace(/ئ/g, 'ي').replace(/[^\p{L}\p{N}]+/gu, ' ').trim().split(' ').map(w => w.length > 3 && w.startsWith('ال') ? w.slice(2) : w).join(' ');
 const AR = { ب: 'b', ت: 't', ث: 's', ج: 'g', ح: 'h', خ: 'k', د: 'd', ذ: 'z', ر: 'r', ز: 'z', س: 's', ش: 'x', ص: 's', ض: 'd', ط: 't', ظ: 'z', غ: 'g', ف: 'f', ق: 'k', ك: 'k', ل: 'l', م: 'm', ن: 'n', ه: 'h', ة: '' };
-function skel(s) { // consonant skeleton: "sherine" and "شيرين" both become "xrn"
+function skel(s) {
   s = String(s || '').toLowerCase().replace(/sh|ch/g, 'x').replace(/kh/g, 'k').replace(/gh/g, 'g').replace(/th/g, 's').replace(/dh/g, 'z').replace(/ph/g, 'f');
   let o = '';
   for (const c of s) {
@@ -197,8 +218,8 @@ export const home = () => cached('home', 30 * MIN, async () => { const d = await
 export const newSongs = () => cached('new', 30 * MIN, async () => parseSongs(await doc('nowlastsongsnow.html')));
 export const newAlbums = () => cached('albums', 60 * MIN, async () => parseAlbums(await doc('lastalbums.html')));
 
-export const ready = t => !!(t.mp3 && t._r && (!t.exp || Date.now() < t.exp)); // MP3.pm links expire, so they get a timer
-export async function resolve(t) { // fetch the real mp3 + cover when a song is about to be played
+export const ready = t => !!(t.mp3 && t._r && (!t.exp || Date.now() < t.exp));
+export async function resolve(t) {
   if (ready(t)) return t;
   if (t.src === 'mp3pm') {
     const r = await cached('s' + t.id, 20 * MIN, async () => {
@@ -234,7 +255,7 @@ export async function search(q) {
   const [dir, ...lists] = await Promise.all([directory().catch(() => []), ...variants(raw).map(v => doc('search.php?q=' + encodeURIComponent(v)).then(d => parseSongs(d)).catch(() => []))]);
   const artists = dir.map(a => ({ ...a, s: scoreArtist(a, n, toks, qs) })).filter(a => a.s > 0).sort((a, b) => b.s - a.s).slice(0, 10);
   let found = lists.flat();
-  if (!found.length && toks.length > 1) { // fall back to single words
+  if (!found.length && toks.length > 1) {
     const words = [...new Set(toks)].filter(w => w.length >= 3).sort((a, b) => b.length - a.length).slice(0, 2);
     found = (await Promise.all(words.map(w => doc('search.php?q=' + encodeURIComponent(w)).then(d => parseSongs(d)).catch(() => [])))).flat();
   }
@@ -256,7 +277,7 @@ export async function search(q) {
   return v;
 }
 
-/* ---------- mixes: daily mixes, moods and genres (they refresh every day, or on demand) ---------- */
+/* ---------- mixes: daily mixes, moods and genres ---------- */
 const pack = l => l.map(t => [t.id, t.title, t.plays || 0, t.duration || 0, t.artist || '', t.artistId || null]);
 const unpack = l => l.map(([id, title, plays, duration, artist, artistId]) => ({ id, title, plays, duration, artist, artistId, album: '', cover: '', mp3: null }));
 const pageSongs = async path => unpack(await cached('pg' + path, DAY, async () => pack(parseSongs(await doc(path)))));
@@ -286,7 +307,7 @@ export const MOODS = [
   { key: 'ramadan', title: 'Ramadan Nights', sub: 'Songs of the holy month', hue: 205, pages: ['album/444.html'] }
 ];
 
-export async function mixSpecs(topIds) { // personal mixes, built from what you listen to
+export async function mixSpecs(topIds) {
   const dir = await directory().catch(() => []);
   if (!dir.length) return [];
   const by = new Map(dir.map(a => [a.id, a])), pop = dir.slice(0, 100), r = rng('dm' + dayKey());
